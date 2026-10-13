@@ -1,4 +1,5 @@
 import type { NextRequest } from "next/server";
+import { normPlace } from "@/lib/geo";
 import { body, fail, int, needAdmin, ok, txt } from "@/lib/server/api";
 import { sessionCookie } from "@/lib/server/auth";
 import { mutate, newId, read, shortCode } from "@/lib/server/store";
@@ -59,6 +60,14 @@ export async function PATCH(req: NextRequest) {
     if (b.regenerateTreeCode) f.treeCode = shortCode(6);
     if (b.introPhotoId !== undefined) f.introPhotoId = typeof b.introPhotoId === "string" && s.media.some((m) => m.id === b.introPhotoId) ? b.introPhotoId : undefined;
     if (b.introCaption !== undefined) f.introCaption = txt(b.introCaption, 80);
+    // Un lieu placé à la main sur la carte : { place: { name, lat, lng } } (lat absent = retirer).
+    const pl = b.place as { name?: unknown; lat?: unknown; lng?: unknown } | undefined;
+    if (pl && typeof pl.name === "string" && pl.name.trim()) {
+      const key = normPlace(pl.name).slice(0, 80);
+      f.places = { ...(f.places ?? {}) };
+      if (typeof pl.lat === "number" && typeof pl.lng === "number" && Math.abs(pl.lat) <= 90 && Math.abs(pl.lng) <= 180) f.places[key] = { lat: Math.round(pl.lat * 1e4) / 1e4, lng: Math.round(pl.lng * 1e4) / 1e4 };
+      else delete f.places[key];
+    }
   });
   return ok();
 }

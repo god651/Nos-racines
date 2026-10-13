@@ -197,12 +197,24 @@ export async function flush() {
 }
 if (typeof document !== "undefined") document.addEventListener("visibilitychange", () => document.hidden && void flush());
 
+// Petites valeurs gardées à côté de la famille (état du partage en direct).
+export const idbGet = <T,>(key: string) => idb<T>("data", "readonly", (s) => s.get(key));
+export const idbPut = (key: string, value: unknown) => idb("data", "readwrite", (s) => s.put(value, key));
+
+// Le partage en direct est prévenu de chaque changement.
+const mutateHooks = new Set<() => void>();
+export const onMutate = (fn: () => void) => {
+  mutateHooks.add(fn);
+  return () => mutateHooks.delete(fn);
+};
+
 let queue: Promise<unknown> = Promise.resolve();
 export function mutate<T>(fn: (s: Store) => T): Promise<T> {
   const run = async () => {
     const out = fn(S);
     persist();
     refreshPages();
+    mutateHooks.forEach((h) => h());
     return out;
   };
   const next = queue.then(run, run);
@@ -215,6 +227,19 @@ export async function replaceAll(next: Store) {
   S = { ...empty(), ...next };
   await flush();
   refreshPages();
+  mutateHooks.forEach((h) => h());
+}
+
+/** Applique des changements reçus des autres téléphones (sans les renvoyer). */
+export async function applyRemote(fn: (s: Store) => void) {
+  const run = async () => {
+    fn(S);
+    persist();
+    refreshPages();
+  };
+  const next = queue.then(run, run);
+  queue = next.catch(() => undefined);
+  return next;
 }
 
 // ─── Photos et voix ───

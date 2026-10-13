@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useT } from "@/lib/i18n/client";
+import { ScanButton } from "@/components/Scanner";
 
 /** Saisie du code d'accès donné par le fondateur (8 caractères). */
 export function CodeEntry({ dark = false }: { dark?: boolean }) {
@@ -11,6 +12,7 @@ export function CodeEntry({ dark = false }: { dark?: boolean }) {
   const [code, setCode] = useState("");
   const clean = code.toUpperCase().replace(/[^A-Z0-9]/g, "");
   return (
+    <div>
     <form
       onSubmit={(e) => {
         e.preventDefault();
@@ -34,5 +36,10 @@ export function CodeEntry({ dark = false }: { dark?: boolean }) {
         {t("Entrer")}
       </button>
     </form>
+    <ScanButton
+      label={t("Ou scanner le QR code reçu")}
+      className={`mt-2 flex min-h-11 w-full items-center justify-center gap-2 rounded-full border text-[14px] ${dark ? "border-or-pale/30 text-or-pale" : "border-or-pale text-foret"}`}
+    />
+    </div>
   );
 }

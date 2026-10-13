@@ -1,0 +1,5 @@
+{
+  "_explication": "Espace en ligne du partage en direct (Supabase). La clé « anon » est publique par nature : sans la clé secrète d'une famille, elle ne donne accès à rien.",
+  "url": "",
+  "key": ""
+}

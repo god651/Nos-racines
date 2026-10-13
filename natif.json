@@ -1,4 +1,4 @@
 {
-  "minApk": "1.0.0",
+  "minApk": "1.0.6",
   "_explication": "Version minimale de l'application installée pour recevoir une mise à jour directe. À augmenter seulement quand les fonctions du téléphone changent (nouveau module Capacitor) : les téléphones plus anciens proposeront alors de télécharger la nouvelle application."
 }

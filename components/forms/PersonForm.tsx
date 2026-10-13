@@ -1,5 +1,6 @@
 "use client";
 
+import { PLACE_SUGGESTIONS } from "@/lib/geo";
 import { AnimatePresence, motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -261,8 +262,13 @@ export function PersonForm({ person, options, initial, backHref, defaultFamilyNa
 
         <Section title={t("Origines et culture")} open={open.origines} onToggle={toggle("origines")}>
           <div className="grid grid-cols-2 gap-3">
-            <Field label={t("Village d’origine")} value={f.village} onChange={set("village")} maxLength={80} />
-            <Field label={t("Ville actuelle")} value={f.city} onChange={set("city")} maxLength={80} />
+            <Field label={t("Village d’origine")} value={f.village} onChange={set("village")} maxLength={80} list="nr-lieux" hint={t("Il apparaîtra sur la carte de la famille.")} />
+            <Field label={t("Ville actuelle")} value={f.city} onChange={set("city")} maxLength={80} list="nr-lieux" hint={t("Ex. : Cocody, Abidjan · Bouaké · Paris")} />
+            <datalist id="nr-lieux">
+              {PLACE_SUGGESTIONS.map((x) => (
+                <option key={x} value={x} />
+              ))}
+            </datalist>
           </div>
           <Field label={t("Métier")} value={f.job} onChange={set("job")} maxLength={80} />
           <div className="grid grid-cols-2 gap-3">

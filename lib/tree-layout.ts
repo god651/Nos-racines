@@ -61,130 +61,214 @@ export function layoutTree(persons: Person[], parentages: Parentage[], unions: U
     const g = gens.get(p.id) ?? 1;
     rows.set(g, [...(rows.get(g) ?? []), p]);
   }
-  const widest = Math.max(1, ...[...rows.values()].map((r) => r.length));
-  const width = Math.max(minWidth, EDGE * 2 + (widest - 1) * MIN_GAP + 20);
-
-  const parentsOf = new Map(parentages.map((pa) => [pa.childId, pa.parentIds]));
+  const parentsOf = new Map(parentages.map((pa) => [pa.childId, pa.parentIds.filter((x) => gens.has(x))]));
   const spouseOf = new Map<string, string[]>();
   for (const u of unions) {
+    if (!gens.has(u.partnerA) || !gens.has(u.partnerB)) continue;
     spouseOf.set(u.partnerA, [...(spouseOf.get(u.partnerA) ?? []), u.partnerB]);
     spouseOf.set(u.partnerB, [...(spouseOf.get(u.partnerB) ?? []), u.partnerA]);
   }
-
   const childrenOf = new Map<string, string[]>();
-  for (const pa of parentages) for (const par of pa.parentIds) childrenOf.set(par, [...(childrenOf.get(par) ?? []), pa.childId]);
+  for (const pa of parentages) for (const par of pa.parentIds) if (gens.has(par)) childrenOf.set(par, [...(childrenOf.get(par) ?? []), pa.childId]);
   const byId = new Map(persons.map((p) => [p.id, p]));
-
-  // Quand deux lignées se marient, celle qui est arrivée en dernier dans l'arbre (ou dont les parents
-  // sont « à compléter ») vient s'asseoir à côté de l'autre : le conjoint se place près de son époux,
-  // et ses parents au-dessus de lui (seconde passe).
-  const lineage = (id: string) => {
-    const ps = parentsOf.get(id) ?? [];
-    if (!ps.length) return -1;
-    if (ps.some((x) => byId.get(x)?.placeholder)) return Infinity;
-    return Math.min(...ps.map((x) => byId.get(x)?.createdAt ?? 0));
+  const gen = (id: string) => gens.get(id) ?? 1;
+  const hasParents = (id: string) => (parentsOf.get(id) ?? []).length > 0;
+  const age = (id: string) => {
+    const p = byId.get(id)!;
+    return [p.birthYear ?? 9999, p.createdAt] as const;
   };
-  const attachedTo = (id: string) => {
-    if (!(parentsOf.get(id) ?? []).length) return undefined;
-    return (spouseOf.get(id) ?? []).find((sp) => (parentsOf.get(sp) ?? []).length && lineage(id) > lineage(sp));
+  const byAge = (a: string, b: string) => age(a)[0] - age(b)[0] || age(a)[1] - age(b)[1];
+
+  // ── Rangement par « foyers » ──────────────────────────────────────────
+  // Un foyer = une personne + son ou ses conjoints, toujours côte à côte.
+  // Sous chaque foyer, ses enfants (du plus âgé au plus jeune), chacun avec son propre foyer.
+  // Les sous-arbres sont posés l'un à côté de l'autre sans jamais se chevaucher (contours par rangée).
+  // Les parents d'un conjoint venu d'une autre famille se placent au-dessus de lui, sur le côté.
+  type Contour = Map<number, [number, number]>;
+  interface Sub { xs: Map<string, number>; contour: Contour; anchor: number }
+  const visited = new Set<string>();
+
+  // Une descendance contient-elle un mariage avec une autre lignée (dont les parents sont dans l'arbre) ?
+  const inlawMemo = new Map<string, boolean>();
+  const marriesInlaw = (id: string) => (spouseOf.get(id) ?? []).some((sp) => hasParents(sp) && gen(sp) === gen(id) && !(parentsOf.get(sp) ?? []).some((x) => (parentsOf.get(id) ?? []).includes(x)));
+  const hasInlaw = (id: string, depth = 0): boolean => {
+    if (inlawMemo.has(id)) return inlawMemo.get(id)!;
+    if (depth > 30) return false;
+    const v = marriesInlaw(id) || (childrenOf.get(id) ?? []).some((c) => hasInlaw(c, depth + 1));
+    inlawMemo.set(id, v);
+    return v;
   };
-  const first = place(null);
-  const hint = new Map<string, number>();
-  for (const p of persons) {
-    if ((parentsOf.get(p.id) ?? []).length) continue;
-    const targets = (childrenOf.get(p.id) ?? []).filter((c) => attachedTo(c) && first.has(c)).map((c) => first.get(c)!.x);
-    if (targets.length) hint.set(p.id, targets.reduce((a, b) => a + b, 0) / targets.length);
-  }
-  const pos = hint.size ? place(hint) : first;
 
-  function place(hint: Map<string, number> | null) {
-  const pos = new Map<string, NodePos>();
-  for (const g of [...rows.keys()].sort((a, b) => a - b)) {
-    const list = rows.get(g)!.sort((a, b) => a.createdAt - b.createdAt);
-    const y = TOP + (g - 1) * ROW_GAP;
-    const r = RADIUS[g - 1] ?? 16;
-
-    // 1. Position souhaitée : sous le foyer des parents ; un conjoint « venu d'ailleurs » se place à côté de son conjoint.
-    const wanted = list.map((p, i) => {
-      const ps = (parentsOf.get(p.id) ?? []).map((id) => pos.get(id)).filter(Boolean) as NodePos[];
-      let x = hint ? first.get(p.id)?.x ?? width / 2 : width / 2 + (i - (list.length - 1) / 2) * 100;
-      if (hint?.has(p.id)) x = hint.get(p.id)!;
-      if (ps.length) x = ps.reduce((s, q) => s + q.x, 0) / ps.length;
-      return { p, x };
-    });
-    for (const w of wanted) {
-      const att = attachedTo(w.p.id);
-      if (!(parentsOf.get(w.p.id) ?? []).length || att) {
-        const partner = att
-          ? wanted.find((z) => z.p.id === att)
-          : (spouseOf.get(w.p.id) ?? []).map((id) => wanted.find((z) => z.p.id === id)).find((z) => z && (parentsOf.get(z.p.id) ?? []).length);
-        if (partner) w.x = partner.x + (w.p.sex === "f" ? 1 : -1) * 60;
-      }
+  const mergeContour = (into: Contour, from: Contour, dx: number) => {
+    for (const [g, [l, r]] of from) {
+      const cur = into.get(g);
+      into.set(g, cur ? [Math.min(cur[0], l + dx), Math.max(cur[1], r + dx)] : [l + dx, r + dx]);
     }
-    // Même foyer : les enfants du plus âgé au plus jeune.
-    wanted.sort((a, b) => a.x - b.x || (a.p.birthYear ?? 9999) - (b.p.birthYear ?? 9999) || a.p.createdAt - b.p.createdAt);
+  };
+  /** Décalage minimal pour poser `sub` à droite (side 1) ou à gauche (side -1) de `acc` sans chevauchement. */
+  const clearance = (acc: Contour, sub: Contour, side: 1 | -1, gap: number) => {
+    let need = side === 1 ? -Infinity : Infinity;
+    for (const [g, [l, r]] of sub) {
+      const c = acc.get(g);
+      if (!c) continue;
+      if (side === 1) need = Math.max(need, c[1] + gap - l);
+      else need = Math.min(need, c[0] - gap - r);
+    }
+    return need;
+  };
 
-    // Les frères et sœurs se répartissent de part et d'autre du foyer de leurs parents ;
-    // celui qui a épousé quelqu'un d'une autre lignée se met au bord, du côté où son conjoint viendra,
-    // et ce conjoint se colle à lui. On range ensuite les groupes sans jamais les mélanger.
-    const spouseSide = (w: (typeof wanted)[number]) => {
-      const sp = (spouseOf.get(w.p.id) ?? []).find((x) => attachedTo(x) === w.p.id);
-      return sp ? (byId.get(sp)?.sex === "f" ? 1 : -1) : 0;
+  function layoutUnit(pid: string, side: 1 | -1): Sub {
+    visited.add(pid);
+    // Conjoints du même rang, pas encore placés.
+    const spouses = (spouseOf.get(pid) ?? []).filter((s) => !visited.has(s) && gen(s) === gen(pid));
+    spouses.forEach((s) => visited.add(s));
+    // Le conjoint dont la famille est dans l'arbre se met du côté où viendra sa famille ;
+    // sinon l'homme à gauche, la femme à droite.
+    const inlawSp = spouses.filter((s) => hasParents(s));
+    const otherSp = spouses.filter((s) => !hasParents(s));
+    let members: string[];
+    if (spouses.length === 1) {
+      const s = spouses[0];
+      const sRight = inlawSp.length ? side === 1 : byId.get(s)?.sex === "f" || (byId.get(s)?.sex === byId.get(pid)?.sex);
+      members = sRight ? [pid, s] : [s, pid];
+    } else if (spouses.length > 1) {
+      const ordered = [...inlawSp, ...otherSp];
+      const near = ordered.filter((_, i) => i % 2 === 0);
+      const far = ordered.filter((_, i) => i % 2 === 1);
+      members = side === 1 ? [...far.reverse(), pid, ...near] : [...near.reverse(), pid, ...far];
+    } else members = [pid];
+
+    // Enfants, groupés sous le bon couple, dans l'ordre des membres du foyer.
+    const allKids = new Set<string>();
+    for (const m of members) for (const c of childrenOf.get(m) ?? []) if (!visited.has(c) && gen(c) > gen(pid)) allKids.add(c);
+    const groupKey = (c: string) => {
+      const ps = (parentsOf.get(c) ?? []).filter((x) => members.includes(x));
+      return ps.reduce((s, x) => s + members.indexOf(x), 0) / Math.max(1, ps.length);
     };
-    const order = new Map<string, { key: number; off: number }>();
-    const groups = new Map<number, typeof wanted>();
-    for (const w of wanted) {
-      if (attachedTo(w.p.id) && wanted.some((z) => z.p.id === attachedTo(w.p.id))) continue;
-      const k = Math.round(w.x);
-      groups.set(k, [...(groups.get(k) ?? []), w]);
+    const kids = [...allKids].sort((a, b) => groupKey(a) - groupKey(b) || byAge(a, b));
+    // Dans chaque groupe, l'enfant marié dans une autre lignée va au bord (droite d'abord, puis gauche).
+    const groups: string[][] = [];
+    for (const c of kids) {
+      const last = groups[groups.length - 1];
+      if (last && groupKey(last[0]) === groupKey(c)) last.push(c);
+      else groups.push([c]);
     }
-    for (const [k, g] of groups) {
-      g.sort((a, b) => spouseSide(a) - spouseSide(b) || (a.p.birthYear ?? 9999) - (b.p.birthYear ?? 9999) || a.p.createdAt - b.p.createdAt);
-      g.forEach((w, i) => order.set(w.p.id, { key: k, off: i - (g.length - 1) / 2 }));
+    const kidSide = new Map<string, 1 | -1>();
+    for (const g of groups) {
+      const inl = g.filter((c) => hasInlaw(c));
+      const rest = g.filter((c) => !hasInlaw(c));
+      const right = inl.filter((_, i) => i % 2 === (side === 1 ? 0 : 1));
+      const left = inl.filter((_, i) => i % 2 === (side === 1 ? 1 : 0));
+      left.forEach((c) => kidSide.set(c, -1));
+      right.forEach((c) => kidSide.set(c, 1));
+      g.splice(0, g.length, ...left, ...rest, ...right);
     }
-    for (const w of wanted) {
-      const att = attachedTo(w.p.id);
-      const po = att ? order.get(att) : undefined;
-      if (po) order.set(w.p.id, { key: po.key, off: po.off + (w.p.sex === "f" ? 0.5 : -0.5) });
-    }
-    wanted.sort((a, b) => order.get(a.p.id)!.key - order.get(b.p.id)!.key || order.get(a.p.id)!.off - order.get(b.p.id)!.off);
-    for (const w of wanted) {
-      const o = order.get(w.p.id)!;
-      w.x = o.key + o.off * MIN_GAP;
-    }
+    const ordered = groups.flat();
 
-    // 2. On écarte les portraits trop proches, puis on garde la rangée dans la largeur.
-    for (let i = 1; i < wanted.length; i++) wanted[i].x = Math.max(wanted[i].x, wanted[i - 1].x + MIN_GAP);
-    const over = wanted.length ? wanted[wanted.length - 1].x - (width - EDGE + 20) : 0;
-    if (over > 0) wanted.forEach((w) => (w.x -= over));
-    const under = wanted.length ? EDGE - wanted[0].x : 0;
-    if (under > 0) wanted.forEach((w) => (w.x += under));
-
-    for (const { p, x } of wanted) {
-      pos.set(p.id, {
-        id: p.id,
-        name: `${p.givenName} ${p.familyName}`.trim(),
-        givenName: p.givenName,
-        initials: initials(p),
-        sub: [p.birthYear ? (p.deathYear ? `${p.birthYear} – ${p.deathYear}` : `${p.birthYear}`) : "", p.job, p.city ?? p.village].filter(Boolean).join(" · "),
-        photoId: p.photoId,
-        isLiving: p.isLiving,
-        hasVoice: voiceIds.has(p.id),
-        isPublic: p.visibility === "public",
-        qrCode: p.qrCode,
-        generation: g,
-        placeholder: !!p.placeholder,
-        animated: !p.isLiving && p.animatePortrait !== false,
-        years: !p.isLiving && (p.birthYear || p.deathYear) ? `${p.birthYear ?? "?"} – ${p.deathYear ?? "?"}` : undefined,
-        anniv: annivs.get(p.id),
-        x: Math.round(x),
-        y,
-        r,
-      });
+    const xs = new Map<string, number>();
+    const contour: Contour = new Map();
+    const anchors: number[] = [];
+    for (const c of ordered) {
+      if (visited.has(c)) continue;
+      const sub = layoutUnit(c, kidSide.get(c) ?? side);
+      const dx = contour.size ? clearance(contour, sub.contour, 1, MIN_GAP) : -sub.anchor;
+      const shift = Number.isFinite(dx) ? dx : (Math.max(...[...contour.values()].map((v) => v[1])) + MIN_GAP - Math.min(...[...sub.contour.values()].map((v) => v[0])));
+      for (const [id, x] of sub.xs) xs.set(id, x + shift);
+      mergeContour(contour, sub.contour, shift);
+      anchors.push(sub.anchor + shift);
     }
+    // Le foyer se centre au-dessus de ses enfants.
+    const width = (members.length - 1) * MIN_GAP;
+    const center = anchors.length ? (anchors[0] + anchors[anchors.length - 1]) / 2 : 0;
+    // On centre le couple (la personne et le conjoint) plutôt que tout le foyer.
+    const pi = members.indexOf(pid);
+    const coupleMid = members.length > 1 ? (pi + (pi === 0 ? 0.5 : -0.5)) * MIN_GAP : 0;
+    const start = center - (members.length > 2 ? width / 2 : coupleMid);
+    members.forEach((m, i) => xs.set(m, start + i * MIN_GAP));
+    const g0 = gen(pid);
+    const row: [number, number] = [start, start + width];
+    const cur = contour.get(g0);
+    contour.set(g0, cur ? [Math.min(cur[0], row[0]), Math.max(cur[1], row[1])] : row);
+    return { xs, contour, anchor: xs.get(pid)! };
   }
 
-    return pos;
+  // Racines : personnes sans parents dans l'arbre, qui ne sont pas le conjoint de quelqu'un qui en a.
+  const isRoot = (id: string) => !hasParents(id) && !(spouseOf.get(id) ?? []).some((s) => hasParents(s) && gen(s) === gen(id));
+  const descCount = new Map<string, number>();
+  const countDesc = (id: string, seen = new Set<string>()): number => {
+    if (seen.has(id)) return 0;
+    seen.add(id);
+    return 1 + (childrenOf.get(id) ?? []).reduce((s, c) => s + countDesc(c, seen), 0);
+  };
+  const roots = persons.filter((p) => isRoot(p.id)).map((p) => p.id);
+  roots.forEach((r) => descCount.set(r, countDesc(r)));
+  roots.sort((a, b) => descCount.get(b)! - descCount.get(a)! || gen(a) - gen(b) || byAge(a, b));
+  // Tout le monde doit être placé, même sans racine (cas tordus).
+  for (const p of persons) if (!roots.includes(p.id)) roots.push(p.id);
+
+  const xs = new Map<string, number>();
+  const acc: Contour = new Map();
+  for (const r of roots) {
+    if (visited.has(r)) continue;
+    // Les enfants déjà placés (un conjoint venu d'une autre famille) indiquent où se mettre.
+    const ghosts = [r, ...(spouseOf.get(r) ?? [])].flatMap((m) => childrenOf.get(m) ?? []).filter((c) => xs.has(c));
+    const sub = layoutUnit(r, 1);
+    if (!acc.size) {
+      for (const [id, x] of sub.xs) xs.set(id, x);
+      mergeContour(acc, sub.contour, 0);
+      continue;
+    }
+    const placedMid = (() => {
+      const all = [...acc.values()];
+      return (Math.min(...all.map((v) => v[0])) + Math.max(...all.map((v) => v[1]))) / 2;
+    })();
+    let shift: number;
+    if (ghosts.length) {
+      const target = ghosts.reduce((s, c) => s + xs.get(c)!, 0) / ghosts.length;
+      // Le centre du foyer au-dessus de l'enfant.
+      const unitXs = [r, ...(spouseOf.get(r) ?? [])].map((m) => sub.xs.get(m)).filter((x): x is number => x !== undefined);
+      const mid = (Math.min(...unitXs) + Math.max(...unitXs)) / 2;
+      const want = target - mid;
+      const sideTo: 1 | -1 = target >= placedMid ? 1 : -1;
+      const need = clearance(acc, sub.contour, sideTo, MIN_GAP + 10);
+      shift = !Number.isFinite(need) ? want : sideTo === 1 ? Math.max(want, need) : Math.min(want, need);
+    } else {
+      const need = clearance(acc, sub.contour, 1, MIN_GAP + 20);
+      shift = Number.isFinite(need) ? need : Math.max(...[...acc.values()].map((v) => v[1])) + MIN_GAP + 20 - Math.min(...[...sub.contour.values()].map((v) => v[0]));
+    }
+    for (const [id, x] of sub.xs) xs.set(id, x + shift);
+    mergeContour(acc, sub.contour, shift);
+  }
+
+  // Mise en page finale : marge à gauche pour les numéros de génération, arbre centré s'il est étroit.
+  const minX = Math.min(...xs.values(), 0);
+  const maxX = Math.max(...xs.values(), 0);
+  const width = Math.max(minWidth, Math.round(maxX - minX) + EDGE * 2);
+  const offset = (width - (maxX - minX)) / 2 - minX;
+
+  const pos = new Map<string, NodePos>();
+  for (const p of persons) {
+    const g = gen(p.id);
+    pos.set(p.id, {
+      id: p.id,
+      name: `${p.givenName} ${p.familyName}`.trim(),
+      givenName: p.givenName,
+      initials: initials(p),
+      sub: [p.birthYear ? (p.deathYear ? `${p.birthYear} – ${p.deathYear}` : `${p.birthYear}`) : "", p.job, p.city ?? p.village].filter(Boolean).join(" · "),
+      photoId: p.photoId,
+      isLiving: p.isLiving,
+      hasVoice: voiceIds.has(p.id),
+      isPublic: p.visibility === "public",
+      qrCode: p.qrCode,
+      generation: g,
+      placeholder: !!p.placeholder,
+      animated: !p.isLiving && p.animatePortrait !== false,
+      years: !p.isLiving && (p.birthYear || p.deathYear) ? `${p.birthYear ?? "?"} – ${p.deathYear ?? "?"}` : undefined,
+      anniv: annivs.get(p.id),
+      x: Math.round((xs.get(p.id) ?? 0) + offset),
+      y: TOP + (g - 1) * ROW_GAP,
+      r: RADIUS[g - 1] ?? 16,
+    });
   }
 
   const links: Link[] = [];

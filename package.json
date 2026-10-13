@@ -21,7 +21,9 @@
     "@fontsource-variable/fraunces": "^5.3.0",
     "@fontsource/caveat": "^5.3.0",
     "@fontsource/inter": "^5.3.0",
+    "fflate": "^0.8.2",
     "framer-motion": "^12.43.0",
+    "jsqr": "^1.4.0",
     "qrcode": "^1.5.4",
     "react": "^19.3.0",
     "react-dom": "^19.3.0"

@@ -1,5 +1,6 @@
 "use client";
 
+import { linkSuffix } from "@/lib/local/sync";
 import { AnimatePresence, motion, Reorder } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -9,6 +10,9 @@ import { exportFamily } from "@/lib/local/backup";
 import { APK_URL, APP_VERSION, isNative, openExternal } from "@/lib/native";
 import { currentVersion } from "@/lib/native/updates";
 import { lookForUpdate } from "./UpdateHost";
+import { joinCode } from "@/lib/share-code";
+import { cloudAvailable, enableSharing, getLink, getSyncStatus, leaveSharing, subscribeSync, syncNow } from "@/lib/local/sync";
+import { useSyncExternalStore } from "react";
 import QRCode from "qrcode";
 import { PhotoPicker } from "./forms/PhotoPicker";
 import { DEFAULT_FACE } from "./AncestorFace";
@@ -42,6 +46,7 @@ export function SettingsView({ d }: { d: SettingsData }) {
     { id: "langue", label: t("Langue") },
     { id: "son", label: t("Son") },
     { id: "internet", label: t("Internet") },
+    { id: "partage", label: t("Partage") },
     { id: "comptes", label: t("Administrateurs") },
     ...(d.isAdmin ? [{ id: "confidentialite", label: t("Confidentialité") }, { id: "sauvegarde", label: t("Sauvegarde") }] : []),
     { id: "apropos", label: t("À propos") },
@@ -68,6 +73,7 @@ export function SettingsView({ d }: { d: SettingsData }) {
         <LanguageSection d={d} />
         <SoundSection />
         <InternetSection d={d} />
+        <SharingSection d={d} />
         <AccountsSection d={d} />
         {d.isAdmin && <PrivacySection d={d} />}
         {d.isAdmin && <BackupSection d={d} />}
@@ -571,7 +577,7 @@ function AccessCode({ userId, code, name, open, onToggle }: { userId: string; co
   const pretty = code ? `${code.slice(0, 4)}-${code.slice(4)}` : "";
   useEffect(() => {
     if (!open || !code) return;
-    const link = `${location.origin}${location.pathname}#/rejoindre/${code}`;
+    const link = joinCode(code, linkSuffix());
     void QRCode.toString(link, { type: "svg", margin: 1, color: { dark: "#12261A", light: "#FFFFFF" } }).then(setSvg);
   }, [open, code]);
   void userId;
@@ -588,7 +594,7 @@ function AccessCode({ userId, code, name, open, onToggle }: { userId: string; co
             <div className="mt-2 flex items-center gap-3 rounded-[14px] bg-white p-3">
               {svg && <div className="h-[96px] w-[96px] shrink-0 [&>svg]:h-full [&>svg]:w-full" dangerouslySetInnerHTML={{ __html: svg }} />}
               <div className="min-w-0 text-[12px] leading-snug text-[#4A463C]">
-                {t("{nom} ouvre l’application, touche « Vous avez reçu un code d’accès ? » et tape ce code, ou scanne ce QR code. Valable une fois.", { nom: name })}
+                {t("{nom} ouvre l’application, touche « Scanner » et vise ce QR code, ou tape ce code dans « Vous avez reçu un code d’accès ? ». Valable une fois.", { nom: name })}
                 <button
                   onClick={async () => {
                     try {
@@ -727,6 +733,85 @@ function AboutSection({ d }: { d: SettingsData }) {
         <p className="mt-4 text-[12px] leading-relaxed text-[#6B6455]">
           {t("NOS RACINES, version {v}. Gratuit. Vos données restent dans votre famille : rien n’est envoyé sur Internet, sauf les textes à traduire. L’intelligence artificielle ne recrée jamais la voix d’une personne.", { v: version })}
         </p>
+      </Card>
+    </div>
+  );
+}
+
+// ─── Partage en direct entre les téléphones ─────────────────────────
+function SharingSection({ d }: { d: SettingsData }) {
+  const t = useT();
+  const st = useSyncExternalStore(subscribeSync, getSyncStatus);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const linked = !!getLink();
+  const ago = st.last ? Math.max(0, Math.round((Date.now() - st.last) / 60000)) : null;
+  return (
+    <div id="partage" className="scroll-mt-16">
+      <Card title={t("Partage en direct")} hint={t("Tous les téléphones de la famille voient la même chose : l’arbre, les photos, les voix, les récits, les bougies et les mots. Chaque téléphone garde aussi tout, pour marcher sans Internet.")}>
+        {!cloudAvailable ? (
+          <p className="text-[13px] text-[#6B6455]">{t("Le partage en direct arrive avec la prochaine mise à jour de l’application.")}</p>
+        ) : linked ? (
+          <>
+            <div className="flex items-center gap-3 rounded-[14px] bg-kapok px-3 py-2.5">
+              <span className={`h-2.5 w-2.5 rounded-full ${st.error ? "bg-terre" : st.busy ? "animate-pulse bg-or" : "bg-[#3C8D5A]"}`} />
+              <p className="flex-1 text-[13px] text-foret">
+                {st.busy
+                  ? st.sending
+                    ? t("Envoi des photos et des voix… ({n})", { n: st.sending })
+                    : t("Synchronisation…")
+                  : st.error === "reseau"
+                    ? t("Pas de connexion : tout est gardé ici et partira dès le retour d’Internet.")
+                    : st.error === "refus"
+                      ? t("Accès refusé : demandez un nouveau QR code « Rejoindre » au fondateur.")
+                      : ago === null
+                        ? t("Activé")
+                        : ago < 1
+                          ? t("À jour")
+                          : t("À jour il y a {n} min", { n: ago })}
+              </p>
+            </div>
+            <div className="mt-3 flex gap-2">
+              <GhostButton className="flex-1" disabled={st.busy} onClick={() => void syncNow()}>
+                {t("Synchroniser")}
+              </GhostButton>
+              <GhostButton
+                className="flex-1"
+                onClick={async () => {
+                  if (await askConfirm(t("Arrêter le partage sur ce téléphone ? La famille reste partagée sur les autres téléphones ; celui-ci ne recevra plus les nouveautés."))) leaveSharing();
+                }}
+              >
+                {t("Arrêter ici")}
+              </GhostButton>
+            </div>
+            {d.isAdmin && <p className="mt-3 text-[12px] leading-relaxed text-[#6B6455]">{t("Pour ajouter un téléphone : QR codes › Inviter. Le proche installe l’application, touche « Scanner » et reçoit toute la famille.")}</p>}
+          </>
+        ) : d.isOwner ? (
+          <>
+            <p className="text-[13px] leading-relaxed text-[#4A463C]">{t("Activez le partage : votre famille est envoyée dans un espace en ligne protégé par une clé secrète, que seul le QR code « Rejoindre » transmet.")}</p>
+            <ErrorNote message={error} />
+            <PrimaryButton
+              className="mt-3"
+              loading={busy}
+              onClick={async () => {
+                setBusy(true);
+                setError(null);
+                try {
+                  await enableSharing();
+                  sound.play("success");
+                } catch (e) {
+                  setError((e as Error).message);
+                } finally {
+                  setBusy(false);
+                }
+              }}
+            >
+              {t("Activer le partage en direct")}
+            </PrimaryButton>
+          </>
+        ) : (
+          <p className="text-[13px] text-[#6B6455]">{t("Le fondateur de la famille peut activer le partage. Vous recevrez ensuite tout en scannant son QR code « Rejoindre ».")}</p>
+        )}
       </Card>
     </div>
   );

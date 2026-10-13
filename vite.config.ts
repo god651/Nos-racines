@@ -19,5 +19,11 @@ export default defineConfig({
       { find: /^@\//, replacement: r(".") + "/" },
     ],
   },
-  build: { outDir: "dist", assetsInlineLimit: 0, chunkSizeWarningLimit: 2000 },
+  build: {
+    outDir: "dist",
+    assetsInlineLimit: 0,
+    chunkSizeWarningLimit: 2000,
+    // Deux pages : l'application, et la page publique des QR codes (voir.html).
+    rollupOptions: { input: { index: r("index.html"), voir: r("voir.html") } },
+  },
 });

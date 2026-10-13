@@ -1,9 +1,11 @@
 "use client";
 
+import { linkSuffix } from "@/lib/local/sync";
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import QRCode from "qrcode";
+import { joinCode } from "@/lib/share-code";
 import { useState } from "react";
 import { api, mediaUrl } from "@/lib/client";
 import { LANGS } from "@/lib/i18n/core";
@@ -58,7 +60,7 @@ export function MeView({ d }: { d: MeData }) {
   const deviceLink = () =>
     run(async () => {
       const { token } = await api<{ token: string }>("/api/invitations", "POST", { device: true });
-      const link = `${window.location.origin}/rejoindre/${token}`;
+      const link = joinCode(token, linkSuffix());
       setDevice({ link, svg: await QRCode.toString(link, { type: "svg", margin: 1, color: { dark: "#12261A", light: "#FAF7F1" } }) });
     });
 
@@ -146,11 +148,26 @@ export function MeView({ d }: { d: MeData }) {
           )}
         </Card>
 
+        {d.isOwner && (
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+            <Link href="/fondateur" className="flex items-center gap-4 rounded-[22px] border border-or/50 bg-[linear-gradient(120deg,#1F3D2B,#12261A)] p-4 text-coton shadow-doux">
+              <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-or/60">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#C8A15A" strokeWidth="1.8" strokeLinecap="round" aria-hidden><path d="M4 20V10M10 20V4M16 20v-7M22 20H2" /></svg>
+              </span>
+              <span className="min-w-0 flex-1">
+                <span className="block font-serif text-[18px]">{t("Espace du fondateur")}</span>
+                <span className="block text-[12px] text-or-pale">{t("Activité, comptes et installations")}</span>
+              </span>
+            </Link>
+          </motion.div>
+        )}
+
         {/* Raccourcis */}
         <div className="grid grid-cols-2 gap-3">
           {[
             { href: "/capsule", title: t("Mes capsules"), sub: c.capsulesSealed ? t("{n} scellée(s)", { n: c.capsulesSealed }) : t("Écrire au futur") },
             { href: "/qr", title: t("QR codes"), sub: d.isAdmin ? t("Arbre, invitations, fiches") : t("Arbre et fiches") },
+            { href: "/carte", title: t("Notre terre"), sub: t("La famille sur la carte") },
             { href: "/parametres", title: t("Paramètres"), sub: t("Famille, langue, son…") },
             ...(d.isAdmin ? [{ href: "/qr", title: t("Inviter un proche"), sub: t("Lecture seule") }] : [{ href: "/arbre", title: t("L’arbre"), sub: t("Toute la famille") }]),
           ].map((x, i) => (

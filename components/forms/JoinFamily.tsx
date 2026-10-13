@@ -8,13 +8,52 @@ import { ErrorNote, Field, PrimaryButton } from "@/components/ui";
 import { api } from "@/lib/client";
 import { useT } from "@/lib/i18n/client";
 import { sound } from "@/lib/sound";
+import { importFamily, joinFromCloud } from "@/lib/local/backup";
+import { getLink, joinCloud } from "@/lib/local/sync";
 
-export function JoinFamily({ token, familyName, valid, deviceLinkName, invalidText }: { token: string; familyName: string; valid: boolean; deviceLinkName?: string; invalidText: string }) {
+export function JoinFamily({ token, familyName, valid, deviceLinkName, invalidText, hasFamily = true, needsName = true, cloud }: { token: string; familyName: string; valid: boolean; deviceLinkName?: string; invalidText: string; hasFamily?: boolean; needsName?: boolean; cloud?: { fid: string; key: string } }) {
   const t = useT();
   const router = useRouter();
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(valid ? null : invalidText);
+  const [error, setError] = useState<string | null>(valid || !hasFamily ? null : invalidText);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // Nouveau téléphone relié au partage en direct : toute la famille arrive par Internet.
+  async function fromCloud() {
+    if (!cloud) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await joinFromCloud(cloud, token, name.trim() || undefined);
+      sound.play("success");
+      router.replace("/accueil");
+    } catch (err) {
+      setError((err as Error).message);
+      setBusy(false);
+    }
+  }
+  // Ce téléphone a déjà la famille (ancienne sauvegarde) mais pas encore le partage : on le relie d'abord.
+  const linking = useRef(false);
+  useEffect(() => {
+    if (!hasFamily || !cloud || getLink() || linking.current) return;
+    linking.current = true;
+    void joinCloud(cloud).then(() => router.refresh()).catch(() => undefined);
+  }, [hasFamily, cloud, router]);
+
+  // Nouveau téléphone : la famille arrive par la sauvegarde envoyée par un administrateur.
+  async function fromBackup(f: File) {
+    setBusy(true);
+    setError(null);
+    try {
+      await importFamily(f, { token, name: name.trim() || undefined });
+      sound.play("success");
+      router.replace("/accueil");
+    } catch (err) {
+      setError((err as Error).message);
+      setBusy(false);
+    }
+  }
   const started = useRef(false);
 
   async function join(e?: React.FormEvent) {
@@ -51,7 +90,7 @@ export function JoinFamily({ token, familyName, valid, deviceLinkName, invalidTe
           {deviceLinkName ? t("Bonjour {nom}", { nom: deviceLinkName }) : t("Vous êtes invité(e)")}
         </h1>
         {familyName && <p className="mt-1 font-main text-2xl text-or-pale">{familyName}</p>}
-        {!deviceLinkName && valid && (
+        {hasFamily && !deviceLinkName && valid && (
           <form onSubmit={join} className="mt-7 flex flex-col gap-4 rounded-[24px] bg-coton p-5 text-ebene">
             <p className="text-sm leading-relaxed text-[#5A5A52]">
               {t("Vous pourrez voir l’arbre, les récits et les souvenirs. Seuls les administrateurs peuvent les modifier.")}
@@ -61,7 +100,32 @@ export function JoinFamily({ token, familyName, valid, deviceLinkName, invalidTe
             <PrimaryButton type="submit" loading={busy}>{t("Rejoindre la famille")}</PrimaryButton>
           </form>
         )}
-        {(deviceLinkName || !valid) && (
+        {!hasFamily && cloud && (
+          <div className="mt-7 flex flex-col gap-4 rounded-[24px] bg-coton p-5 text-ebene">
+            <p className="text-sm leading-relaxed text-[#5A5A52]">
+              {t("Bienvenue ! L’arbre, les photos, les voix et les hommages vont arriver sur ce téléphone. Il faut Internet pour cette première fois.")}
+            </p>
+            {needsName && <Field label={t("Votre prénom")} value={name} onChange={(e) => setName(e.target.value)} maxLength={60} autoFocus />}
+            <ErrorNote message={error} />
+            <PrimaryButton type="button" loading={busy} disabled={needsName && !name.trim()} onClick={() => void fromCloud()}>
+              {t("Recevoir la famille")}
+            </PrimaryButton>
+          </div>
+        )}
+        {!hasFamily && !cloud && (
+          <div className="mt-7 flex flex-col gap-4 rounded-[24px] bg-coton p-5 text-ebene">
+            <p className="text-sm leading-relaxed text-[#5A5A52]">
+              {t("Bienvenue ! Pour recevoir l’arbre, les photos et les voix, demandez à un administrateur de la famille de vous envoyer la sauvegarde (Paramètres › Sauvegarde, par WhatsApp par exemple), puis ouvrez-la ici.")}
+            </p>
+            {needsName && <Field label={t("Votre prénom")} value={name} onChange={(e) => setName(e.target.value)} maxLength={60} />}
+            <input ref={fileRef} type="file" accept="application/json,.json" className="hidden" onChange={(e) => e.target.files?.[0] && void fromBackup(e.target.files[0])} />
+            <ErrorNote message={error} />
+            <PrimaryButton type="button" loading={busy} disabled={needsName && !name.trim()} onClick={() => fileRef.current?.click()}>
+              {t("Ouvrir la sauvegarde reçue")}
+            </PrimaryButton>
+          </div>
+        )}
+        {hasFamily && (deviceLinkName || !valid) && (
           <div className="mt-6">
             {busy && <p className="text-or-pale">{t("Ouverture de votre compte…")}</p>}
             <ErrorNote message={error} />

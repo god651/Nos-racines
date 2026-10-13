@@ -35,6 +35,12 @@ import QrPublic from "@/app/q/[code]/page";
 import QrCodes from "@/app/qr/page";
 import Rejoindre from "@/app/rejoindre/[token]/page";
 import NouveauSouvenir from "@/app/souvenir/nouveau/page";
+import Voir from "@/app/voir/page";
+import Carte from "@/app/carte/page";
+import Fondateur from "@/app/fondateur/page";
+import { ScanHost } from "@/components/Scanner";
+import { logOpen } from "@/lib/activity";
+import { startSync } from "@/lib/local/sync";
 
 // Les écrans de l'application. Ceux qui lisent les données sont des fonctions
 // qui préparent les informations puis renvoient l'écran à afficher.
@@ -59,13 +65,21 @@ const ROUTES: [string, PageFn][] = [
   ["/qr", QrCodes as unknown as PageFn],
   ["/rejoindre/:token", Rejoindre as unknown as PageFn],
   ["/souvenir/nouveau", NouveauSouvenir as unknown as PageFn],
+  ["/voir", Voir as unknown as PageFn],
+  ["/carte", Carte as unknown as PageFn],
+  ["/fondateur", Fondateur as unknown as PageFn],
 ];
 
 export function App() {
   // Générique d'ouverture : une fois à chaque lancement de l'application.
   const [intro, setIntro] = useState(true);
   useEffect(() => {
-    const replay = () => setIntro(true);
+    logOpen();
+    startSync();
+    const replay = () => {
+      logOpen();
+      setIntro(true);
+    };
     window.addEventListener("nr-intro", replay);
     window.addEventListener("nr-resume", replay);
     // Application Android : barre d'état, bouton retour, écran de démarrage.
@@ -80,7 +94,7 @@ export function App() {
     let hiddenAt = 0;
     const vis = () => {
       if (document.visibilityState === "hidden") hiddenAt = Date.now();
-      else if (hiddenAt && Date.now() - hiddenAt > 2000) setIntro(true);
+      else if (hiddenAt && Date.now() - hiddenAt > 2000) replay();
     };
     const show = (e: PageTransitionEvent) => e.persisted && setIntro(true);
     document.addEventListener("visibilitychange", vis);
@@ -123,6 +137,7 @@ export function App() {
       <UpdateHost blocked={intro || showGuide || !!legacy} />
       <ConfirmHost />
       <CropHost />
+      <ScanHost />
       {showGuide && viewer.user && <Guide userId={viewer.user.id} isAdmin={viewer.isAdmin} onDone={() => setGuideTick((x) => x + 1)} />}
       {intro && <Intro onDone={() => setIntro(false)} />}
       {!intro && legacy && <LegacyPrompt legacy={legacy} />}

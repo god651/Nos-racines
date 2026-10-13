@@ -38,14 +38,19 @@ export async function POST(req: NextRequest) {
     const yk = P({ givenName: "Yao", sex: "m", birthYear: 1947, nickname: "Papa Yao", city: "Bouaké", job: "Instituteur" });
     const ad = P({ givenName: "Adjoua", sex: "f", birthYear: 1950, city: "Bouaké", job: "Sage-femme" });
     const ko = P({ givenName: "Konan", sex: "m", birthYear: 1955, city: "Yamoussoukro", job: "Mécanicien" });
-    const kd = P({ givenName: userName, sex: "m", birthYear: 1984, city: "Abidjan" });
-    s.persons.push(nk, ak, ah, yk, ad, ko, kd);
-    s.unions.push({ id: newId(), partnerA: nk.id, partnerB: ak.id, kind: "customary", rank: 1 }, { id: newId(), partnerA: nk.id, partnerB: ah.id, kind: "customary", rank: 2 });
+    const am = P({ givenName: "Amenan", sex: "f", birthYear: 1953, village: "Toumodi", city: "Bouaké", job: "Couturière" });
+    const kd = P({ givenName: userName, sex: "m", birthYear: 1984, city: "Cocody, Abidjan" });
+    const ay = P({ givenName: "Aya", sex: "f", birthYear: 1988, city: "Paris", job: "Infirmière" });
+    const af = P({ givenName: "Affoué", sex: "f", birthYear: 1986, city: "San-Pédro", job: "Comptable" });
+    s.persons.push(nk, ak, ah, yk, am, ad, ko, kd, ay, af);
+    s.unions.push({ id: newId(), partnerA: nk.id, partnerB: ak.id, kind: "customary", rank: 1 }, { id: newId(), partnerA: nk.id, partnerB: ah.id, kind: "customary", rank: 2 }, { id: newId(), partnerA: yk.id, partnerB: am.id, kind: "civil" });
     s.parentages.push(
       { childId: yk.id, parentIds: [nk.id, ak.id], kind: "biological" },
       { childId: ad.id, parentIds: [nk.id, ak.id], kind: "fostered" },
       { childId: ko.id, parentIds: [nk.id, ah.id], kind: "biological" },
-      { childId: kd.id, parentIds: [yk.id], kind: "biological" },
+      { childId: kd.id, parentIds: [yk.id, am.id], kind: "biological" },
+      { childId: ay.id, parentIds: [yk.id, am.id], kind: "biological" },
+      { childId: af.id, parentIds: [ko.id], kind: "biological" },
     );
     s.family = { id: newId(), name: "Famille Kouassi (exemple)", village: "Sakassou", since: 1921, motto: "Ce que nous sommes, ils le sauront", treeCode: shortCode(6), covers: [], createdAt: now };
     const user = { id: newId(), name: userName, role: "admin" as const, personId: kd.id, createdAt: now };

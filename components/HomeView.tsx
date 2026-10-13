@@ -1,5 +1,7 @@
 "use client";
 
+import { SHAPES } from "@/lib/ci-map-data";
+import { ScanButton } from "./Scanner";
 import { animate, motion, useMotionValue, useSpring, useTransform } from "framer-motion";
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
@@ -120,6 +122,7 @@ export function HomeView({ d }: { d: HomeData }) {
         <AncestorFace src={mediaUrl(d.face) ?? DEFAULT_FACE} size={210} opacity={0.2} delay={1.5} className="-right-6 top-6" />
         <Grain opacity={0.14} />
         <Dust />
+        <ScanButton className="absolute right-16 top-[52px] z-10 flex h-10 w-10 items-center justify-center rounded-full border border-or-pale/25 bg-nuit/40 text-[#E6D3A3] backdrop-blur-md" />
         <Link href="/parametres" aria-label={t("Paramètres")} className="absolute right-4 top-[52px] z-10 flex h-10 w-10 items-center justify-center rounded-full border border-or-pale/25 bg-nuit/40 backdrop-blur-md">
           <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="#E6D3A3" strokeWidth="1.7" aria-hidden>
             <circle cx="12" cy="12" r="3" />
@@ -250,6 +253,23 @@ export function HomeView({ d }: { d: HomeData }) {
             </div>
           </motion.section>
         )}
+
+        <motion.div {...fadeUp(1.0)}>
+          <Link href="/carte" className="relative flex items-center gap-4 overflow-hidden rounded-[22px] border border-or/40 bg-[linear-gradient(120deg,#12261A,#1F3D2B)] p-4 text-coton shadow-doux">
+            <svg viewBox="-10 -10 420 424" className="h-14 w-14 shrink-0" aria-hidden>
+              <path d={SHAPES.civ} fill="#2F5638" stroke="#C8A15A" strokeWidth="10" strokeLinejoin="round" />
+              <circle cx="223" cy="243" r="22" fill="#C8A15A">
+                <animate attributeName="r" values="18;30;18" dur="2.6s" repeatCount="indefinite" />
+              </circle>
+              <circle cx="257" cy="324" r="16" fill="#FAF7F1" />
+            </svg>
+            <span className="min-w-0 flex-1">
+              <span className="block font-serif text-[18px]">{t("Notre terre")}</span>
+              <span className="block text-[12px] leading-snug text-or-pale">{t("D’où nous venons, où nous vivons aujourd’hui : la famille sur la carte.")}</span>
+            </span>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#C8A15A" strokeWidth="2" aria-hidden><path d="M9 5l7 7-7 7" /></svg>
+          </Link>
+        </motion.div>
 
         {d.stats.members >= 3 && (
           <motion.div {...fadeUp(1.05)}>

@@ -142,6 +142,8 @@ export interface Family {
   /** Visage fondu dans le générique d'ouverture et la couverture (un ancêtre honoré). */
   introPhotoId?: string;
   introCaption?: string;
+  /** Lieux placés à la main sur la carte (villages absents de la liste), par nom simplifié. */
+  places?: Record<string, { lat: number; lng: number }>;
   createdAt: number;
 }
 

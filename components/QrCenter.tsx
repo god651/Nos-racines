@@ -72,7 +72,7 @@ export function QrCenter({ familyName, isAdmin, tree, invites, persons, local }:
         <PageHeader title={t("QR codes")} kicker={familyName} back="/accueil" />
         {local && (
           <p className="mx-5 mb-3 rounded-[14px] border border-or/40 bg-or/10 px-3.5 py-2.5 text-[13px] leading-snug text-[#5A4A22]">
-            {t("Version démo : les données restent dans ce téléphone, les QR codes s’ouvrent donc ici. Le partage en direct avec toute la famille arrivera avec la version définitive.")}
+            {t("L’arbre et les fiches s’ouvrent avec l’appareil photo de n’importe quel téléphone, même sans l’application. Les informations sont dans le QR code lui-même : rien n’est mis sur Internet.")}
           </p>
         )}
         <div role="tablist" className="mx-5 mb-4 flex rounded-full bg-kapok p-1">
@@ -94,20 +94,11 @@ export function QrCenter({ familyName, isAdmin, tree, invites, persons, local }:
             <section>
               <BigQr svg={tree.svg} title={t("Voir l’arbre de la famille")} sub={familyName} />
               <p className="mt-4 text-sm leading-relaxed text-[#4A463C] print:hidden">
-                {t("Ce QR code ouvre l’arbre en lecture seule, sans compte : noms et liens de parenté. Seules les fiches marquées « publiques » montrent leur photo et leur histoire.")}
+                {t("Ce QR code montre l’arbre à n’importe qui, sans application ni compte : les noms, les dates et les liens de parenté. Après un changement dans l’arbre, imprimez le nouveau QR code.")}
               </p>
               <LinkRow link={tree.link} copied={copied === tree.link} onCopy={() => copy(tree.link)} onShare={() => share(tree.link, t("L’arbre de la famille {nom}", { nom: familyName }))} />
               <div className="mt-4 flex gap-2 print:hidden">
                 {!embedded && !isNative && <GhostButton onClick={() => window.print()} className="flex-1">{t("Imprimer")}</GhostButton>}
-                {isAdmin && (
-                  <GhostButton
-                    disabled={busy}
-                    className="flex-1"
-                    onClick={async () => (await askConfirm(t("Créer un nouveau code ? L’ancien QR code de l’arbre ne fonctionnera plus."))) && run(() => api("/api/famille", "PATCH", { regenerateTreeCode: true }))}
-                  >
-                    {t("Nouveau code")}
-                  </GhostButton>
-                )}
               </div>
             </section>
           )}
@@ -115,7 +106,7 @@ export function QrCenter({ familyName, isAdmin, tree, invites, persons, local }:
           {tab === "inviter" && isAdmin && (
             <section>
               <p className="mb-4 text-sm leading-relaxed text-[#4A463C] print:hidden">
-                {t("Montrez ce QR code à un proche : en le scannant, il rejoint la famille et peut tout voir, sans rien modifier. Vous pourrez ensuite le nommer administrateur dans les paramètres (3 au maximum).")}
+                {t("Votre proche installe l’application Nos Racines, touche « Scanner » et vise ce QR code : il rejoint la famille et peut tout voir, sans rien modifier. Ce code ne s’ouvre qu’avec le scanner de l’application. Vous pourrez ensuite le nommer administrateur dans les paramètres (3 au maximum).")}
               </p>
               {invites.length === 0 ? (
                 <PrimaryButton loading={busy} onClick={() => run(async () => { await api("/api/invitations", "POST", {}); sound.play("chime"); })}>
@@ -159,7 +150,7 @@ export function QrCenter({ familyName, isAdmin, tree, invites, persons, local }:
           {tab === "membres" && (
             <section>
               <p className="mb-4 text-sm leading-relaxed text-[#4A463C] print:hidden">
-                {t("Un QR code par personne, à imprimer et coller sous son portrait, sur un cadre ou une plaque. Une fiche « famille » ne montre que le nom aux inconnus.")}
+                {t("Un QR code par personne, à imprimer et coller sous son portrait, sur un cadre ou une plaque. N’importe quel téléphone l’ouvre. Une fiche « famille » ne montre que le nom et les dates ; une fiche « publique » montre aussi son histoire.")}
               </p>
               {persons.length === 0 ? (
                 <p className="rounded-[18px] border border-dashed border-or p-4 text-sm text-[#6B6455]">{t("Ajoutez d’abord des personnes dans l’arbre.")}</p>

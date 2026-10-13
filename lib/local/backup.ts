@@ -1,7 +1,8 @@
 import type { Store } from "@/lib/types";
 import { embedded, hostSave } from "./env";
 import { isNative, shareFile } from "@/lib/native";
-import { empty, kv, mediaBlob, newId, putMedia, read, replaceAll, clearMedia } from "./store-core";
+import { getLink, setCloudLink } from "./sync";
+import { empty, kv, mediaBlob, mutate, newId, putMedia, read, replaceAll, clearMedia } from "./store-core";
 
 // Sauvegarde complète en un seul fichier (fiches + photos + voix),
 // à garder ailleurs que dans le téléphone, et à restaurer sur un nouveau téléphone.
@@ -26,15 +27,17 @@ function fromBase64(b64: string, type: string) {
 
 export async function exportFamily() {
   const s = read();
-  const { sessions: _s, invites: _i, ...rest } = s;
+  const { sessions: _s, invites: allInvites, ...rest } = s;
   void _s;
-  void _i;
+  // Les invitations encore valables voyagent avec la sauvegarde : un proche qui a scanné
+  // le QR code « Rejoindre » ouvre ainsi la famille avec SON compte (membre), pas en administrateur.
+  const invites = allInvites.filter((i) => !i.revoked && (i.kind === "account" ? i.uses === 0 : !i.forUserId));
   const media: { id: string; mime: string; data: string }[] = [];
   for (const m of s.media) {
     const b = mediaBlob(m.id);
     if (b) media.push({ id: m.id, mime: m.mime, data: await toBase64(b) });
   }
-  const data = { format: FORMAT, version: 1, exportedAt: new Date().toISOString(), store: { ...rest, settings: { ...s.settings, translateKey: undefined } }, media };
+  const data = { format: FORMAT, version: 1, exportedAt: new Date().toISOString(), nuage: getLink() ?? undefined, store: { ...rest, invites, settings: { ...s.settings, translateKey: undefined } }, media };
   const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
   const name = `nos-racines-${(s.family?.name ?? "famille").toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-")}-${new Date().toISOString().slice(0, 10)}.json`;
   const file = new File([blob], name, { type: "application/json" });
@@ -70,18 +73,43 @@ export async function exportFamily() {
   setTimeout(() => URL.revokeObjectURL(url), 20000);
 }
 
+/** Utilise une invitation (QR code « Rejoindre » ou code d'accès) : renvoie le compte ouvert, ou rien si le code n'est pas valable. */
+export function applyInvite(store: Store, token: string, name?: string): string | undefined {
+  const code = token.trim().toUpperCase().replace(/[^A-Z0-9_-]/gi, "");
+  const inv = store.invites.find((i) => (i.token === token || (i.kind === "account" && i.token === code)) && !i.revoked);
+  if (!inv || (inv.kind === "account" && inv.uses > 0)) return undefined;
+  inv.uses++;
+  if (inv.forUserId) return inv.forUserId;
+  const id = newId();
+  store.users.push({ id, name: (name || "Membre").slice(0, 60), role: "membre", createdAt: Date.now() });
+  return id;
+}
+
 /** Restaure une sauvegarde : remplace la famille de ce téléphone. Ce téléphone devient administrateur. */
-export async function importFamily(file: File) {
-  let data: { format?: string; store?: Partial<Store>; media?: { id: string; mime: string; data: string }[] };
+export async function importFamily(file: File, join?: { token: string; name?: string }) {
+  let data: { format?: string; store?: Partial<Store>; media?: { id: string; mime: string; data: string }[]; nuage?: { fid: string; key: string } };
   try {
     data = JSON.parse(await file.text());
   } catch {
     throw new Error("Ce fichier n’est pas une sauvegarde NOS RACINES.");
   }
   if (data.format !== FORMAT || !data.store?.family) throw new Error("Ce fichier n’est pas une sauvegarde NOS RACINES.");
-  const store: Store = { ...empty(), ...(data.store as Store), sessions: [], invites: [] };
+  const store: Store = { ...empty(), ...(data.store as Store), sessions: [] };
+  store.invites = store.invites ?? [];
+  // Arrivée par un QR code « Rejoindre » : on vérifie le code AVANT de toucher au téléphone.
+  const joinUserId = join ? applyInvite(store, join.token, join.name) : undefined;
+  if (join && !joinUserId) throw new Error("Ce QR code ne correspond pas à cette sauvegarde. Demandez une sauvegarde récente à l’administrateur.");
   await clearMedia();
   for (const m of data.media ?? []) await putMedia(m.id, fromBase64(m.data, m.mime));
+  // La sauvegarde connaît l'espace en ligne de la famille : ce téléphone s'y relie.
+  if (data.nuage?.fid && data.nuage.key) setCloudLink(data.nuage);
+  if (joinUserId) {
+    const token = newId(32);
+    store.sessions.push({ token, userId: joinUserId, createdAt: Date.now() });
+    kv.set("nr_session", token);
+    await replaceAll(store);
+    return;
+  }
   // On ouvre la session du premier administrateur (c'est votre sauvegarde).
   let admin = store.users.find((u) => u.role === "admin");
   if (!admin) {
@@ -92,4 +120,20 @@ export async function importFamily(file: File) {
   store.sessions.push({ token, userId: admin.id, createdAt: Date.now() });
   kv.set("nr_session", token);
   await replaceAll(store);
+}
+
+/** Nouveau téléphone : la famille arrive par le partage en direct, puis le code d'invitation ouvre le compte. */
+export async function joinFromCloud(link: { fid: string; key: string }, token: string, name?: string) {
+  const { joinCloud } = await import("./sync");
+  await joinCloud(link);
+  let userId: string | undefined;
+  await mutate((s) => {
+    userId = applyInvite(s, token, name);
+    if (userId) {
+      const t = newId(32);
+      s.sessions.push({ token: t, userId, createdAt: Date.now() });
+      kv.set("nr_session", t);
+    }
+  });
+  if (!userId) throw new Error("Ce QR code n’est plus valable. Demandez-en un nouveau au fondateur de la famille.");
 }

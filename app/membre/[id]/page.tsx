@@ -1,7 +1,7 @@
 import { notFound } from "next/navigation";
 import { MemberView, type MemberData, type RelLink } from "@/components/MemberView";
 import { childrenOf, computeGenerations, parentsOf, siblingsOf, spousesOf } from "@/lib/genealogy";
-import { baseUrl } from "@/lib/server/auth";
+import { personLink } from "@/lib/share-code";
 import { requireMember } from "@/lib/server/page";
 import { qrSvg } from "@/lib/server/qr";
 import { read } from "@/lib/server/store";
@@ -25,7 +25,7 @@ export default async function MembrePage({ params }: { params: Promise<{ id: str
   if (!p) notFound();
 
   const gens = computeGenerations(s.persons, s.parentages, s.unions);
-  const qrLink = `${await baseUrl()}/q/${p.qrCode}`;
+  const qrLink = personLink(s, p);
   const d: MemberData = {
     id: p.id,
     name: fullName(p),

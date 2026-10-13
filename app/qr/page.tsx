@@ -1,5 +1,6 @@
 import { QrCenter } from "@/components/QrCenter";
-import { baseUrl } from "@/lib/server/auth";
+import { linkSuffix } from "@/lib/local/sync";
+import { joinCode, personLink, treeLink as treeShareLink } from "@/lib/share-code";
 import { requireMember } from "@/lib/server/page";
 import { qrSvg } from "@/lib/server/qr";
 import { fullName } from "@/lib/types";
@@ -11,15 +12,15 @@ export const dynamic = "force-dynamic";
 
 export default async function QrPage() {
   const { s, family, viewer } = await requireMember();
-  const base = await baseUrl();
-  const treeLink = `${base}/famille/${family.treeCode}`;
+  // Arbre et fiches : lisibles par n'importe quel téléphone. Invitation : seulement par le scanner de l'application.
+  const treeLink = treeShareLink(s);
   const invites = viewer.isAdmin
     ? await Promise.all(
         s.invites
           .filter((i) => !i.revoked && !i.forUserId)
           .sort((a, b) => b.createdAt - a.createdAt)
           .map(async (i) => {
-            const link = `${base}/rejoindre/${i.token}`;
+            const link = joinCode(i.token, linkSuffix());
             return { token: i.token, link, svg: await qrSvg(link), uses: i.uses, createdAt: i.createdAt };
           }),
       )
@@ -28,7 +29,7 @@ export default async function QrPage() {
     [...s.persons]
       .sort((a, b) => (a.birthYear ?? 9999) - (b.birthYear ?? 9999))
       .map(async (p) => {
-        const link = `${base}/q/${p.qrCode}`;
+        const link = personLink(s, p);
         return { id: p.id, name: fullName(p), code: p.qrCode, isPublic: p.visibility === "public", link, svg: await qrSvg(link, "#12261A", "#FFFFFF") };
       }),
   );
