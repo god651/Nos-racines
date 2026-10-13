@@ -25,9 +25,9 @@ jobs:
       NR_VERSION_CODE: ${{ github.run_number }}
       REPO: ${{ github.repository }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v5
         with:
           node-version: 20
           cache: npm
@@ -60,18 +60,18 @@ jobs:
           npx vite build
           (cd dist && zip -qr ../mise-a-jour.zip .)
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: 21
-
-      - uses: android-actions/setup-android@v3
 
       - name: Application Android
         env:
           NR_KEYSTORE_PASSWORD: ${{ secrets.NR_KEYSTORE_PASSWORD }}
           NR_KEYSTORE: ${{ github.workspace }}/secrets/nos-racines.keystore
         run: |
+          # Le SDK Android est déjà installé sur les machines de GitHub.
+          echo "sdk.dir=$ANDROID_HOME" > android/local.properties
           npx cap sync android
           cd android
           chmod +x gradlew
