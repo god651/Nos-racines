@@ -72,10 +72,13 @@ jobs:
         run: |
           # Le SDK Android est déjà installé sur les machines de GitHub.
           echo "sdk.dir=$ANDROID_HOME" > android/local.properties
-          npx cap sync android
+          npx cap sync android > journal.txt 2>&1 || { tail -40 journal.txt | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g' | sed 's/^/::error title=cap sync::/'; exit 1; }
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon
+          ./gradlew assembleRelease --no-daemon --stacktrace > ../journal.txt 2>&1 || {
+            grep -nE "What went wrong|error:|FAILURE|Exception|> " ../journal.txt | head -60 | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g' | sed 's/^/::error title=gradle::/'
+            tail -30 ../journal.txt | sed ':a;N;$!ba;s/%/%25/g;s/\n/%0A/g' | sed 's/^/::error title=fin::/'
+            exit 1; }
           cp app/build/outputs/apk/release/app-release.apk ../nos-racines.apk
 
       - name: Bulletin de mise à jour
