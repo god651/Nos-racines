@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Nos Racines</string>
+    <string name="title_activity_main">Nos Racines</string>
+    <string name="package_name">ci.nosracines.app</string>
+    <string name="custom_url_scheme">ci.nosracines.app</string>
+</resources>

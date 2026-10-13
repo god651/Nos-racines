@@ -1,0 +1,110 @@
+# Fabrication de NOS RACINES à chaque envoi de code.
+# Résultat : un BROUILLON de version sur GitHub (Releases), avec l'application Android
+# et la mise à jour. Rien n'arrive sur les téléphones tant que le créateur
+# n'a pas cliqué sur « Publish release ».
+name: Fabrication
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: fabrication
+  cancel-in-progress: false
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      NR_VERSION: 1.0.${{ github.run_number }}
+      NR_VERSION_CODE: ${{ github.run_number }}
+      REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Dépendances
+        run: npm ci
+
+      - name: Vérifier le mot de passe secret
+        env:
+          NR_KEYSTORE_PASSWORD: ${{ secrets.NR_KEYSTORE_PASSWORD }}
+        run: |
+          if [ -z "$NR_KEYSTORE_PASSWORD" ]; then
+            echo "::error::Le secret NR_KEYSTORE_PASSWORD manque (Settings > Secrets and variables > Actions)."
+            exit 1
+          fi
+
+      - name: Visage du générique
+        env:
+          NR_KEYSTORE_PASSWORD: ${{ secrets.NR_KEYSTORE_PASSWORD }}
+        run: |
+          # Photo de famille chiffrée dans le dépôt : illisible sans le mot de passe secret.
+          openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in secrets/visage-pere.jpg.enc -out public/visage-pere.jpg -pass env:NR_KEYSTORE_PASSWORD
+
+      - name: Application web
+        run: |
+          export VITE_APP_VERSION="$NR_VERSION"
+          export VITE_UPDATE_FEED="https://github.com/$REPO/releases/latest/download/latest.json"
+          export VITE_APK_URL="https://github.com/$REPO/releases/latest/download/nos-racines.apk"
+          export VITE_RELEASES_URL="https://github.com/$REPO/releases"
+          npx vite build
+          (cd dist && zip -qr ../mise-a-jour.zip .)
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Application Android
+        env:
+          NR_KEYSTORE_PASSWORD: ${{ secrets.NR_KEYSTORE_PASSWORD }}
+          NR_KEYSTORE: ${{ github.workspace }}/secrets/nos-racines.keystore
+        run: |
+          npx cap sync android
+          cd android
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+          cp app/build/outputs/apk/release/app-release.apk ../nos-racines.apk
+
+      - name: Bulletin de mise à jour
+        run: |
+          node -e '
+            const fs = require("fs");
+            const v = process.env.NR_VERSION, repo = process.env.REPO;
+            const natif = JSON.parse(fs.readFileSync("natif.json", "utf8"));
+            const notes = fs.existsSync("notes-version.txt") ? fs.readFileSync("notes-version.txt", "utf8").trim() : "";
+            fs.writeFileSync("latest.json", JSON.stringify({
+              version: v,
+              notes,
+              bundle: `https://github.com/${repo}/releases/download/v${v}/mise-a-jour.zip`,
+              minApk: natif.minApk,
+              apk: `https://github.com/${repo}/releases/download/v${v}/nos-racines.apk`
+            }, null, 2));
+          '
+          cat latest.json
+
+      - name: Brouillon de version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          {
+            echo "$(cat notes-version.txt 2>/dev/null)"
+            echo
+            echo "---"
+            echo "Pour envoyer cette version à toute la famille : cliquez sur le crayon (Edit) puis sur « Publish release »."
+            echo "Tant que ce n'est pas fait, aucun téléphone ne la reçoit."
+          } > corps.md
+          gh release create "v$NR_VERSION" nos-racines.apk mise-a-jour.zip latest.json \
+            --draft --title "NOS RACINES $NR_VERSION" --notes-file corps.md --target "$GITHUB_SHA"

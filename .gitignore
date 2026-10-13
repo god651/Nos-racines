@@ -1,0 +1,12 @@
+node_modules
+dist
+*.tsbuildinfo
+.env
+.env.local
+# Seule la clé protégée du dossier secrets/ va sur GitHub (inutilisable sans le mot de passe secret).
+*.keystore
+*.jks
+!secrets/nos-racines.keystore
+android/app/release/
+# Photo de famille du générique : ajoutée pendant la fabrication depuis les secrets.
+public/visage-pere.jpg
