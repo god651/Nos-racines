@@ -1,7 +1,7 @@
 Nouveautés :
-• Partage en direct : l'arbre, les photos, les voix, les bougies et les mots arrivent sur tous les téléphones de la famille.
 • Scanner de QR codes dans l'application (bouton en haut de l'accueil).
 • Les QR codes des fiches et de l'arbre s'ouvrent avec n'importe quel téléphone, même sans l'application.
 • L'arbre se range mieux : chaque couple côte à côte, sans frère ni sœur au milieu.
 • Nouvelle carte « Notre terre » : d'où vient la famille et où vit chacun aujourd'hui.
 • Espace du fondateur : activité de la famille et installations de l'application.
+• Sauvegarde automatique (ou manuelle avec rappel) dans Documents › NosRacines, à rouvrir après une réinstallation.
