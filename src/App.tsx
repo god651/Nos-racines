@@ -41,6 +41,8 @@ import Fondateur from "@/app/fondateur/page";
 import { ScanHost } from "@/components/Scanner";
 import { logOpen } from "@/lib/activity";
 import { startSync } from "@/lib/local/sync";
+import { startAutosave } from "@/lib/local/autosave";
+import { SaveHost } from "@/components/SaveHost";
 
 // Les écrans de l'application. Ceux qui lisent les données sont des fonctions
 // qui préparent les informations puis renvoient l'écran à afficher.
@@ -76,6 +78,7 @@ export function App() {
   useEffect(() => {
     logOpen();
     startSync();
+    startAutosave();
     const replay = () => {
       logOpen();
       setIntro(true);
@@ -135,6 +138,7 @@ export function App() {
       </div>
       {!persistent && !isNative && <DemoNotice />}
       <UpdateHost blocked={intro || showGuide || !!legacy} />
+      <SaveHost blocked={intro || showGuide || !!legacy || route.path === "/" || !viewer.user} />
       <ConfirmHost />
       <CropHost />
       <ScanHost />

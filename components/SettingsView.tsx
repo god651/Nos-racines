@@ -11,7 +11,8 @@ import { APK_URL, APP_VERSION, isNative, openExternal } from "@/lib/native";
 import { currentVersion } from "@/lib/native/updates";
 import { lookForUpdate } from "./UpdateHost";
 import { joinCode } from "@/lib/share-code";
-import { cloudAvailable, enableSharing, getLink, getSyncStatus, leaveSharing, subscribeSync, syncNow } from "@/lib/local/sync";
+import { cloudAvailable, enableSharing, getLink, getSyncStatus, leaveSharing, myRecoveryCode, subscribeSync, syncNow } from "@/lib/local/sync";
+import { backupPath, fileBackupAvailable, getMode, getSaveState, lastSaved, saveNow, setMode, subscribeSave, type SaveMode } from "@/lib/local/autosave";
 import { useSyncExternalStore } from "react";
 import QRCode from "qrcode";
 import { PhotoPicker } from "./forms/PhotoPicker";
@@ -48,7 +49,8 @@ export function SettingsView({ d }: { d: SettingsData }) {
     { id: "internet", label: t("Internet") },
     { id: "partage", label: t("Partage") },
     { id: "comptes", label: t("Administrateurs") },
-    ...(d.isAdmin ? [{ id: "confidentialite", label: t("Confidentialité") }, { id: "sauvegarde", label: t("Sauvegarde") }] : []),
+    { id: "sauvegarde", label: t("Sauvegarde") },
+    ...(d.isAdmin ? [{ id: "confidentialite", label: t("Confidentialité") }] : []),
     { id: "apropos", label: t("À propos") },
   ];
   return (
@@ -76,7 +78,7 @@ export function SettingsView({ d }: { d: SettingsData }) {
         <SharingSection d={d} />
         <AccountsSection d={d} />
         {d.isAdmin && <PrivacySection d={d} />}
-        {d.isAdmin && <BackupSection d={d} />}
+        <BackupSection d={d} />
         <AboutSection d={d} />
       </div>
     </main>
@@ -642,13 +644,8 @@ function BackupSection({ d }: { d: SettingsData }) {
   const { busy, error, run } = useSaver();
   return (
     <div id="sauvegarde" className="scroll-mt-16 space-y-4">
-      <Card title={t("Sauvegarde")} hint={t("Tout est enregistré dans ce téléphone. Pour ne rien perdre (téléphone perdu, application effacée), téléchargez régulièrement une sauvegarde et gardez-la ailleurs (e-mail, Google Drive, WhatsApp).")}>
-        <GhostButton className="w-full" disabled={busy} onClick={() => void run(() => exportFamily(), false)}>
-          {t("Télécharger une sauvegarde")}
-        </GhostButton>
-        <p className="mt-2 text-xs leading-snug text-[#6B6455]">{t("Le fichier contient toute la famille : fiches, liens, récits, photos et voix.")}</p>
-      </Card>
-      <Card title={t("Tout effacer")} className="border-terre/30">
+      <AutoBackupCard meId={d.meId} />
+      {d.isAdmin && <Card title={t("Tout effacer")} className="border-terre/30">
         {!open ? (
           <button onClick={() => setOpen(true)} className="text-[13px] text-terre underline">{t("Réinitialiser l’application…")}</button>
         ) : (
@@ -673,8 +670,90 @@ function BackupSection({ d }: { d: SettingsData }) {
             </div>
           </form>
         )}
-      </Card>
+      </Card>}
     </div>
+  );
+}
+
+function AutoBackupCard({ meId }: { meId: string }) {
+  const t = useT();
+  const save = useSyncExternalStore(subscribeSave, getSaveState);
+  const [mode, setM] = useState<SaveMode>(getMode());
+  const [code, setCode] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const linked = !!getLink();
+  useEffect(() => {
+    if (linked) void myRecoveryCode(meId).then(setCode).catch(() => setCode(null));
+  }, [linked, meId]);
+  const last = lastSaved();
+  return (
+    <>
+      <Card title={t("Sauvegarde")} hint={t("Tout est enregistré dans ce téléphone, et aussi dans un fichier de sauvegarde qui reste même si l’application est effacée. Après une réinstallation, ou sur un autre téléphone, on rouvre ce fichier et tout revient là où on s’était arrêté.")}>
+        <Toggle
+          label={t("Sauvegarde automatique")}
+          hint={mode === "auto" ? t("Après chaque information ajoutée, le fichier est mis à jour tout seul.") : t("Après chaque information ajoutée, une petite notification vous propose de sauvegarder.")}
+          checked={mode === "auto"}
+          onChange={(v) => {
+            const m: SaveMode = v ? "auto" : "manuel";
+            setMode(m);
+            setM(m);
+          }}
+        />
+        {fileBackupAvailable ? (
+          <div className="mt-3 rounded-[14px] bg-kapok px-3 py-2.5 text-[12px] leading-relaxed text-foret">
+            <p>
+              {t("Fichier")} : <b>{backupPath()}</b>
+            </p>
+            <p>{last ? t("Dernière sauvegarde : {d}", { d: new Date(last).toLocaleString() }) : t("Pas encore de sauvegarde.")}</p>
+          </div>
+        ) : (
+          <p className="mt-3 text-[12px] leading-relaxed text-[#6B6455]">{t("Dans cette version de démonstration, la sauvegarde se télécharge. Dans l’application Android, elle va toute seule dans Documents › NosRacines.")}</p>
+        )}
+        <ErrorNote message={err ?? save.error ?? null} />
+        <div className="mt-3 flex gap-2">
+          {fileBackupAvailable && (
+            <GhostButton className="flex-1" disabled={save.busy} onClick={() => void saveNow()}>
+              {save.busy ? t("Sauvegarde…") : t("Sauvegarder maintenant")}
+            </GhostButton>
+          )}
+          <GhostButton
+            className="flex-1"
+            onClick={async () => {
+              setErr(null);
+              try {
+                await exportFamily();
+              } catch (e) {
+                setErr((e as Error).message);
+              }
+            }}
+          >
+            {fileBackupAvailable ? t("Envoyer une copie") : t("Télécharger une sauvegarde")}
+          </GhostButton>
+        </div>
+        <p className="mt-2 text-xs leading-snug text-[#6B6455]">{t("Le fichier contient toute la famille : fiches, liens, récits, photos et voix. Pour le rouvrir : premier écran › « Restaurer une sauvegarde ».")}</p>
+      </Card>
+      {linked && code && (
+        <Card title={t("Votre code de reprise")} hint={t("Notez-le sur papier. Sur un nouveau téléphone ou après une réinstallation : premier écran › « Reprendre avec mon code de reprise ». La famille et votre compte reviennent, là où vous vous étiez arrêté.")}>
+          <div className="flex items-center gap-3">
+            <p className="flex-1 whitespace-nowrap rounded-[14px] border border-dashed border-or bg-or/10 px-2 py-3 text-center font-serif text-[16px] tracking-[1px] text-nuit">{code}</p>
+            <button
+              onClick={async () => {
+                try {
+                  await navigator.clipboard.writeText(code);
+                  setCopied(true);
+                  setTimeout(() => setCopied(false), 1500);
+                } catch {}
+              }}
+              className="text-[13px] text-or-fonce underline"
+            >
+              {copied ? t("Copié") : t("Copier")}
+            </button>
+          </div>
+          <p className="mt-2 text-[12px] text-[#6B6455]">{t("Ce code est personnel : il ouvre votre compte. Ne le donnez à personne.")}</p>
+        </Card>
+      )}
+    </>
   );
 }
 

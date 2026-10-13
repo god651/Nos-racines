@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { Dust, Grain, Vignette } from "@/components/ambiance";
 import { CodeEntry } from "@/components/forms/CodeEntry";
+import { RecoverEntry } from "@/components/forms/RecoverEntry";
 import { getT } from "@/lib/i18n/server";
 import { getViewer } from "@/lib/server/auth";
 import { read } from "@/lib/server/store";
@@ -26,6 +27,9 @@ export default async function BienvenuePage() {
         <div className="mt-6 rounded-[20px] border border-or/40 bg-coton/5 p-4">
           <p className="mb-3 text-sm font-semibold text-or">{t("Vous avez reçu un code d’accès ?")}</p>
           <CodeEntry dark />
+        </div>
+        <div className="mt-2 text-center">
+          <RecoverEntry />
         </div>
         <div className="mt-4 rounded-[20px] border border-or-pale/25 bg-coton/5 p-4 text-sm leading-relaxed text-coton/85">
           <p className="font-semibold text-or">{t("Vous êtes déjà administrateur sur un autre appareil ?")}</p>

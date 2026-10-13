@@ -25,7 +25,8 @@ function fromBase64(b64: string, type: string) {
   return new Blob([bytes], { type });
 }
 
-export async function exportFamily() {
+/** Prépare le fichier de sauvegarde complet (fiches, liens, photos, voix, compte de ce téléphone). */
+export async function buildBackup() {
   const s = read();
   const { sessions: _s, invites: allInvites, ...rest } = s;
   void _s;
@@ -37,9 +38,18 @@ export async function exportFamily() {
     const b = mediaBlob(m.id);
     if (b) media.push({ id: m.id, mime: m.mime, data: await toBase64(b) });
   }
-  const data = { format: FORMAT, version: 1, exportedAt: new Date().toISOString(), nuage: getLink() ?? undefined, store: { ...rest, invites, settings: { ...s.settings, translateKey: undefined } }, media };
-  const blob = new Blob([JSON.stringify(data)], { type: "application/json" });
+  // Le compte ouvert sur ce téléphone : à la restauration, on rouvre CE compte.
+  const me = s.sessions.find((x) => x.token === kv.get("nr_session"))?.userId;
+  const data = { format: FORMAT, version: 1, exportedAt: new Date().toISOString(), me, nuage: getLink() ?? undefined, store: { ...rest, invites, settings: { ...s.settings, translateKey: undefined } }, media };
+  const text = JSON.stringify(data);
+  const blob = new Blob([text], { type: "application/json" });
   const name = `nos-racines-${(s.family?.name ?? "famille").toLowerCase().normalize("NFD").replace(/[^a-z0-9]+/g, "-")}-${new Date().toISOString().slice(0, 10)}.json`;
+  return { name, blob, text };
+}
+
+/** Envoie une copie de la sauvegarde ailleurs (WhatsApp, Drive, e-mail) ou la télécharge. */
+export async function exportFamily() {
+  const { name, blob } = await buildBackup();
   const file = new File([blob], name, { type: "application/json" });
   if (isNative) {
     try {
@@ -87,7 +97,7 @@ export function applyInvite(store: Store, token: string, name?: string): string 
 
 /** Restaure une sauvegarde : remplace la famille de ce téléphone. Ce téléphone devient administrateur. */
 export async function importFamily(file: File, join?: { token: string; name?: string }) {
-  let data: { format?: string; store?: Partial<Store>; media?: { id: string; mime: string; data: string }[]; nuage?: { fid: string; key: string } };
+  let data: { format?: string; store?: Partial<Store>; media?: { id: string; mime: string; data: string }[]; nuage?: { fid: string; key: string }; me?: string };
   try {
     data = JSON.parse(await file.text());
   } catch {
@@ -110,8 +120,8 @@ export async function importFamily(file: File, join?: { token: string; name?: st
     await replaceAll(store);
     return;
   }
-  // On ouvre la session du premier administrateur (c'est votre sauvegarde).
-  let admin = store.users.find((u) => u.role === "admin");
+  // On rouvre le compte de la personne qui a fait la sauvegarde ; sinon, le premier administrateur.
+  let admin = store.users.find((u) => u.id === data.me) ?? store.users.find((u) => u.role === "admin");
   if (!admin) {
     admin = { id: newId(), name: "Administrateur", role: "admin", createdAt: Date.now() };
     store.users.push(admin);
@@ -136,4 +146,19 @@ export async function joinFromCloud(link: { fid: string; key: string }, token: s
     }
   });
   if (!userId) throw new Error("Ce QR code n’est plus valable. Demandez-en un nouveau au fondateur de la famille.");
+}
+
+/** Nouveau téléphone ou réinstallation : avec son code de reprise, on retrouve la famille et son compte. */
+export async function recoverAccount(code: string) {
+  const { recoverWithCode } = await import("./sync");
+  const uid = await recoverWithCode(code);
+  let ok = false;
+  await mutate((s) => {
+    if (!s.users.some((u) => u.id === uid)) return;
+    const t = newId(32);
+    s.sessions.push({ token: t, userId: uid, createdAt: Date.now() });
+    kv.set("nr_session", t);
+    ok = true;
+  });
+  if (!ok) throw new Error("Ce compte n’existe plus dans la famille. Demandez un QR code « Rejoindre ».");
 }

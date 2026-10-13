@@ -326,3 +326,37 @@ function fromB64(b64: string, type: string) {
   for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
   return new Blob([u], { type });
 }
+
+// ─── Code de reprise personnel ───
+const ALPHA = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
+const pretty = (c: string) => c.match(/.{1,4}/g)!.join("-");
+
+/** Le code de reprise de la personne connectée (créé au besoin). Sans partage en direct : rien. */
+export async function myRecoveryCode(userId: string): Promise<string | null> {
+  const link = getLink();
+  if (!cloudAvailable || !link) return null;
+  const k = `nr_reprise_${userId}`;
+  let code = kv.get(k);
+  if (code) return pretty(code);
+  code = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => ALPHA[b % ALPHA.length]).join("");
+  await rpc("nr_set_recovery", { fid: link.fid, fkey: link.key, code, uid: userId });
+  kv.set(k, code);
+  return pretty(code);
+}
+
+/** Nouveau téléphone ou réinstallation : le code ramène la famille et rouvre le compte de la personne. */
+export async function recoverWithCode(raw: string): Promise<string> {
+  if (!cloudAvailable) throw new Error("Le partage en direct n’est pas disponible dans cette version.");
+  const code = raw.toUpperCase().replace(/[^A-Z0-9]/g, "");
+  if (code.length < 16) throw new Error("Le code contient 16 caractères (4 groupes de 4).");
+  let rows: { fid: string; fkey: string; uid: string }[];
+  try {
+    rows = await rpc("nr_get_recovery", { code });
+  } catch {
+    throw new Error("Pas de connexion pour le moment. Réessayez plus tard.");
+  }
+  if (!rows?.[0]) throw new Error("Code inconnu. Vérifiez chaque caractère.");
+  await joinCloud({ fid: rows[0].fid, key: rows[0].fkey });
+  kv.set(`nr_reprise_${rows[0].uid}`, code);
+  return rows[0].uid;
+}

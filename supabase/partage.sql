@@ -138,6 +138,33 @@ begin
   insert into nr_days (day, device_id) values (current_date, left(did, 64)) on conflict do nothing;
 end $$;
 
+-- Code de reprise personnel : sur un nouveau téléphone (ou après réinstallation),
+-- la personne tape son code et retrouve sa famille ET son propre compte.
+create table if not exists nr_recovery (
+  code_hash   text primary key,
+  family_id   text not null references nr_families(id) on delete cascade,
+  fkey        text not null,
+  user_id     text not null,
+  created_at  timestamptz not null default now()
+);
+alter table nr_recovery enable row level security;
+
+create or replace function nr_set_recovery(fid text, fkey text, code text, uid text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  perform nr_check(fid, fkey);
+  if length(code) < 16 then raise exception 'NR_CODE_TROP_COURT'; end if;
+  insert into nr_recovery (code_hash, family_id, fkey, user_id)
+  values (encode(sha256(convert_to(upper(code), 'UTF8')), 'hex'), fid, fkey, left(uid, 64))
+  on conflict (code_hash) do update set family_id = excluded.family_id, fkey = excluded.fkey, user_id = excluded.user_id;
+end $$;
+
+create or replace function nr_get_recovery(code text) returns table (fid text, fkey text, uid text)
+language plpgsql security definer set search_path = public as $$
+begin
+  return query select r.family_id, r.fkey, r.user_id from nr_recovery r where r.code_hash = encode(sha256(convert_to(upper(code), 'UTF8')), 'hex');
+end $$;
+
 -- Tableau de bord du créateur de l'application (protégé par son code créateur).
 create or replace function nr_creator_stats(pin text) returns jsonb
 language plpgsql security definer set search_path = public as $$
@@ -160,6 +187,6 @@ begin
   );
 end $$;
 
-revoke all on nr_families, nr_records, nr_media, nr_devices, nr_days from anon, authenticated;
-grant execute on function nr_create, nr_push, nr_pull, nr_put_media, nr_get_media, nr_has_media, nr_ping, nr_creator_stats to anon, authenticated;
+revoke all on nr_families, nr_records, nr_media, nr_devices, nr_days, nr_recovery from anon, authenticated;
+grant execute on function nr_create, nr_push, nr_pull, nr_put_media, nr_get_media, nr_has_media, nr_ping, nr_creator_stats, nr_set_recovery, nr_get_recovery to anon, authenticated;
 revoke execute on function nr_check from anon, authenticated, public;

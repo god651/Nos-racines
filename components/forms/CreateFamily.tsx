@@ -1,5 +1,6 @@
 "use client";
 
+import { RecoverEntry } from "./RecoverEntry";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
@@ -129,6 +130,8 @@ export function CreateFamily() {
         <button type="button" onClick={() => restoreInput.current?.click()} disabled={!!busy} className="mt-4 text-[13px] text-or-pale/80 underline underline-offset-4">
           {t("Restaurer une sauvegarde")}
         </button>
+        <p className="mx-auto mt-1 max-w-[300px] text-[11px] leading-snug text-or-pale/55">{t("Le fichier se trouve dans Documents › NosRacines du téléphone, ou là où vous l’avez envoyé.")}</p>
+        <RecoverEntry />
       </motion.div>
     </main>
   );
