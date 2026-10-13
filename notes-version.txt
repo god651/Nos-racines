@@ -1,7 +1,3 @@
 Nouveautés :
-• Scanner de QR codes dans l'application (bouton en haut de l'accueil).
-• Les QR codes des fiches et de l'arbre s'ouvrent avec n'importe quel téléphone, même sans l'application.
-• L'arbre se range mieux : chaque couple côte à côte, sans frère ni sœur au milieu.
-• Nouvelle carte « Notre terre » : d'où vient la famille et où vit chacun aujourd'hui.
-• Espace du fondateur : activité de la famille et installations de l'application.
-• Sauvegarde automatique (ou manuelle avec rappel) dans Documents › NosRacines, à rouvrir après une réinstallation.
+• Rejoindre la famille depuis un autre téléphone : un message clair, et la sauvegarde reçue s'ouvre directement avec votre compte.
+• Scanner de QR codes, QR codes lisibles par n'importe quel téléphone, arbre mieux rangé, carte « Notre terre », espace du fondateur, sauvegarde automatique.
