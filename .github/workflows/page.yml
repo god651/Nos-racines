@@ -1,0 +1,74 @@
+# Page GitHub de NOS RACINES : la page publique des QR codes, et la version iPhone.
+# Elle est refaite à chaque envoi de code, et quand le créateur publie une version.
+name: Page
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+  release:
+    types: [published]
+
+concurrency:
+  group: page
+  cancel-in-progress: false
+
+jobs:
+  # Une version vient d'être publiée : on relance la page depuis main
+  # (la page GitHub n'accepte que la branche main).
+  relais:
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run page.yml --ref main -R "${{ github.repository }}"
+
+  # Page publique des QR codes (fiches et arbre lisibles par n'importe quel téléphone),
+  # et dans /app/ la version iPhone : celle de la DERNIÈRE VERSION PUBLIÉE par le créateur
+  # (un brouillon n'arrive jamais sur les iPhone). Jamais la photo du générique.
+  pages:
+    if: github.event_name != 'release'
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+    env:
+      REPO: ${{ github.repository }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: Page publique
+        run: |
+          export VITE_APK_URL="https://github.com/$REPO/releases/latest/download/nos-racines.apk"
+          export VITE_WEB_APP_URL="https://${GITHUB_REPOSITORY_OWNER,,}.github.io/${REPO#*/}/app/"
+          npx vite build
+          mkdir -p site
+          cp dist/voir.html site/voir.html
+          cp dist/voir.html site/index.html
+          cp -r dist/assets site/assets
+          cp dist/icon.svg site/icon.svg
+          rm -f site/assets/*.jpg site/assets/*.jpeg
+      - name: Version iPhone (dernière version publiée)
+        run: |
+          if curl -fsSL -o iphone.zip "https://github.com/$REPO/releases/latest/download/iphone.zip"; then
+            mkdir -p site/app && unzip -q iphone.zip -d site/app
+            rm -f site/app/visage-pere.jpg
+            echo "Version iPhone : $(curl -fsSL https://github.com/$REPO/releases/latest/download/latest.json | grep -o '"version": *"[^"]*"')"
+          else
+            echo "::warning::Pas encore de version iPhone publiée (elle arrive avec la prochaine version publiée)."
+          fi
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+      - uses: actions/deploy-pages@v4

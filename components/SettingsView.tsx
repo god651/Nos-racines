@@ -7,7 +7,8 @@ import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import { api, mediaUrl, uploadPhoto } from "@/lib/client";
 import { exportFamily } from "@/lib/local/backup";
-import { APK_URL, APP_VERSION, isNative, openExternal } from "@/lib/native";
+import { APK_URL, APP_VERSION, isNative, isPwa, openExternal, WEB_APP_URL } from "@/lib/native";
+import { checkPwaUpdate } from "@/lib/pwa";
 import { currentVersion } from "@/lib/native/updates";
 import { lookForUpdate } from "./UpdateHost";
 import { joinCode } from "@/lib/share-code";
@@ -239,7 +240,7 @@ function IntroSection({ d }: { d: SettingsData }) {
   return (
     <div id="generique" className="scroll-mt-16">
       <Card title={t("Générique d’ouverture")} hint={t("Le visage d’un ancêtre honoré apparaît doucement, fondu dans la lumière, à l’ouverture de l’application et en haut de l’accueil.")}>
-        {!d.family.introPhotoId && (
+        {!d.family.introPhotoId && !isPwa && (
           <div className="mb-3 flex items-center gap-3 rounded-[14px] bg-kapok/60 p-2.5">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={DEFAULT_FACE} alt="" className="h-14 w-14 rounded-full object-cover [filter:grayscale(1)_sepia(.35)]" />
@@ -690,8 +691,8 @@ function AutoBackupCard({ meId }: { meId: string }) {
   const last = lastSaved();
   return (
     <>
-      <Card title={t("Sauvegarde")} hint={t("Tout est enregistré dans ce téléphone, et aussi dans un fichier de sauvegarde qui reste même si l’application est effacée. Après une réinstallation, ou sur un autre téléphone, on rouvre ce fichier et tout revient là où on s’était arrêté.")}>
-        <Toggle
+      <Card title={t("Sauvegarde")} hint={isPwa ? t("Tout est enregistré dans cet iPhone. Gardez aussi une copie à l’abri : touchez « Enregistrer une copie », puis « Enregistrer dans Fichiers » (iCloud Drive). Sur un autre téléphone, on rouvre ce fichier et tout revient là où on s’était arrêté.") : t("Tout est enregistré dans ce téléphone, et aussi dans un fichier de sauvegarde qui reste même si l’application est effacée. Après une réinstallation, ou sur un autre téléphone, on rouvre ce fichier et tout revient là où on s’était arrêté.")}>
+        {!isPwa && <Toggle
           label={t("Sauvegarde automatique")}
           hint={mode === "auto" ? t("Après chaque information ajoutée, le fichier est mis à jour tout seul.") : t("Après chaque information ajoutée, une petite notification vous propose de sauvegarder.")}
           checked={mode === "auto"}
@@ -700,8 +701,10 @@ function AutoBackupCard({ meId }: { meId: string }) {
             setMode(m);
             setM(m);
           }}
-        />
-        {fileBackupAvailable ? (
+        />}
+        {isPwa ? (
+          <p className="mt-1 text-[12px] leading-relaxed text-[#6B6455]">{last ? t("Dernière copie : {d}", { d: new Date(last).toLocaleString() }) : t("Pas encore de copie.")} {t("Tous les trois jours au plus, une petite notification vous le rappelle.")}</p>
+        ) : fileBackupAvailable ? (
           <div className="mt-3 rounded-[14px] bg-kapok px-3 py-2.5 text-[12px] leading-relaxed text-foret">
             <p>
               {t("Fichier")} : <b>{backupPath()}</b>
@@ -729,7 +732,7 @@ function AutoBackupCard({ meId }: { meId: string }) {
               }
             }}
           >
-            {fileBackupAvailable ? t("Envoyer une copie") : t("Télécharger une sauvegarde")}
+            {fileBackupAvailable ? t("Envoyer une copie") : isPwa ? t("Enregistrer une copie") : t("Télécharger une sauvegarde")}
           </GhostButton>
         </div>
         <p className="mt-2 text-xs leading-snug text-[#6B6455]">{t("Le fichier contient toute la famille : fiches, liens, récits, photos et voix. Pour le rouvrir : premier écran › « Restaurer une sauvegarde ».")}</p>
@@ -764,10 +767,15 @@ function AboutSection({ d }: { d: SettingsData }) {
   const [version, setVersion] = useState(APP_VERSION);
   const [check, setCheck] = useState<"" | "busy" | "none" | "found" | "error">("");
   const [apkQr, setApkQr] = useState("");
+  const [iosQr, setIosQr] = useState("");
+  const [os, setOs] = useState<"android" | "iphone">(isPwa ? "iphone" : "android");
   useEffect(() => {
     void currentVersion().then(setVersion);
-    if (APK_URL) void QRCode.toDataURL(APK_URL, { margin: 1, width: 360, color: { dark: "#12261A", light: "#FBF6EC" } }).then(setApkQr);
+    const qr = (u: string) => QRCode.toDataURL(u, { margin: 1, width: 360, color: { dark: "#12261A", light: "#FBF6EC" } });
+    if (APK_URL) void qr(APK_URL).then(setApkQr);
+    if (WEB_APP_URL) void qr(WEB_APP_URL).then(setIosQr);
   }, []);
+  const install = os === "iphone" && iosQr ? { qr: iosQr, url: WEB_APP_URL } : apkQr ? { qr: apkQr, url: APK_URL } : iosQr ? { qr: iosQr, url: WEB_APP_URL } : null;
   return (
     <div id="apropos" className="scroll-mt-16">
       <Card title={t("À propos")}>
@@ -783,12 +791,13 @@ function AboutSection({ d }: { d: SettingsData }) {
           <dt className="text-[#6B6455]">{t("Version")}</dt>
           <dd className="text-right text-ebene">{version}</dd>
         </dl>
-        {isNative && (
+        {(isNative || isPwa) && (
           <div className="mt-4">
             <GhostButton
               className="w-full"
               onClick={async () => {
                 setCheck("busy");
+                if (isPwa) return setCheck(await checkPwaUpdate());
                 const r = await lookForUpdate();
                 setCheck(r.kind === "none" ? "none" : r.kind === "error" ? "error" : "found");
               }}
@@ -801,13 +810,26 @@ function AboutSection({ d }: { d: SettingsData }) {
             <p className="mt-2 text-[11px] leading-relaxed text-[#6B6455]">{t("Les mises à jour sont publiées uniquement par le créateur de l’application. Elles ne touchent jamais à votre famille, vos photos ni vos voix.")}</p>
           </div>
         )}
-        {apkQr && (
+        {install && (
           <div className="mt-5 rounded-[18px] bg-kapok p-4 text-center">
             <p className="font-serif text-[18px] text-nuit">{t("Installer l’application chez un proche")}</p>
-            <p className="mt-1 text-[12px] leading-relaxed text-[#3E3A32]">{t("Il scanne ce code avec l’appareil photo de son téléphone Android, télécharge l’application et l’installe.")}</p>
+            {apkQr && iosQr && (
+              <div className="mx-auto mt-3 flex w-fit rounded-full bg-coton p-1 text-[13px]">
+                {(["android", "iphone"] as const).map((k) => (
+                  <button key={k} onClick={() => setOs(k)} className={`min-h-9 rounded-full px-4 ${os === k ? "bg-nuit text-coton" : "text-[#3E3A32]"}`}>
+                    {k === "android" ? "Android" : "iPhone"}
+                  </button>
+                ))}
+              </div>
+            )}
+            <p className="mt-2 text-[12px] leading-relaxed text-[#3E3A32]">
+              {install.url === WEB_APP_URL
+                ? t("Il scanne ce code avec l’appareil photo de son iPhone et ouvre le lien dans Safari. Puis il touche le bouton Partager, et « Sur l’écran d’accueil ».")
+                : t("Il scanne ce code avec l’appareil photo de son téléphone Android, télécharge l’application et l’installe.")}
+            </p>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={apkQr} alt="" className="mx-auto mt-3 h-40 w-40 rounded-[12px]" />
-            <button onClick={() => openExternal(APK_URL)} className="mt-2 text-[12px] text-foret underline">{t("Ouvrir le lien de téléchargement")}</button>
+            <img src={install.qr} alt="" className="mx-auto mt-3 h-40 w-40 rounded-[12px]" />
+            <button onClick={() => openExternal(install.url)} className="mt-2 text-[12px] text-foret underline">{install.url === WEB_APP_URL ? t("Ouvrir le lien") : t("Ouvrir le lien de téléchargement")}</button>
           </div>
         )}
         {!d.isCreator && <CreatorUnlock />}

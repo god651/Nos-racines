@@ -17,6 +17,7 @@ import { Logo } from "@/components/Logo";
 // Tout ce qui s'affiche est contenu dans le lien : aucune donnée n'est stockée en ligne.
 
 const APK = import.meta.env.VITE_APK_URL || "";
+const WEB = import.meta.env.VITE_WEB_APP_URL || "";
 const lang = /^en\b/i.test(navigator.language || "") ? "en" : "fr";
 document.documentElement.lang = lang;
 
@@ -32,7 +33,7 @@ function Page() {
     if (d.kind === "person") document.title = `${d.card.n} — NOS RACINES`;
     if (d.kind === "tree") document.title = `${d.card.f} — NOS RACINES`;
   }, [d]);
-  if (d.kind === "person") return <SharedPerson card={d.card} footer={<SharedFooter apkUrl={APK} />} />;
+  if (d.kind === "person") return <SharedPerson card={d.card} footer={<SharedFooter apkUrl={APK} webUrl={WEB} />} />;
   if (d.kind === "tree") return <SharedTree card={d.card} />;
   return (
     <main className="flex min-h-dvh flex-col items-center justify-center gap-4 bg-nuit px-8 text-center text-coton">
@@ -43,7 +44,7 @@ function Page() {
           ? t("Ce QR code permet de rejoindre une famille. Il s’ouvre uniquement avec le scanner de l’application Nos Racines.")
           : t("Scannez le QR code d’un portrait ou d’un arbre de famille pour le voir ici.")}
       </p>
-      <SharedFooter apkUrl={APK} />
+      <SharedFooter apkUrl={APK} webUrl={WEB} />
     </main>
   );
 }

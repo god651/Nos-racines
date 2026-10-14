@@ -63,10 +63,11 @@ export async function exportFamily() {
     if (await hostSave(name, blob)) return;
     throw new Error("L’enregistrement de fichiers n’est pas possible ici.");
   }
-  // Sur téléphone : feuille de partage (Drive, WhatsApp, e-mail) ; sinon, téléchargement.
+  // Sur téléphone : feuille de partage (Fichiers, Drive, WhatsApp, e-mail) ; sinon, téléchargement.
   try {
     if (navigator.canShare?.({ files: [file] })) {
       await navigator.share({ files: [file], title: name });
+      kv.set("nr_sauvegarde_derniere", String(Date.now()));
       return;
     }
   } catch (e) {

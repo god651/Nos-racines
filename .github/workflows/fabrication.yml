@@ -58,8 +58,14 @@ jobs:
           export VITE_APK_URL="https://github.com/$REPO/releases/latest/download/nos-racines.apk"
           export VITE_RELEASES_URL="https://github.com/$REPO/releases"
           export VITE_VIEW_URL="https://${GITHUB_REPOSITORY_OWNER,,}.github.io/${REPO#*/}/voir.html"
+          export VITE_WEB_APP_URL="https://${GITHUB_REPOSITORY_OWNER,,}.github.io/${REPO#*/}/app/"
           npx vite build
           (cd dist && zip -qr ../mise-a-jour.zip .)
+          # Version iPhone : la même application, installable depuis Safari (sans la photo de famille,
+          # car elle sera sur une page publique).
+          VITE_PWA=1 npx vite build --outDir dist-iphone
+          rm -f dist-iphone/visage-pere.jpg
+          (cd dist-iphone && zip -qr ../iphone.zip .)
 
       - uses: actions/setup-java@v5
         with:
@@ -110,39 +116,5 @@ jobs:
             echo "Pour envoyer cette version à toute la famille : cliquez sur le crayon (Edit) puis sur « Publish release »."
             echo "Tant que ce n'est pas fait, aucun téléphone ne la reçoit."
           } > corps.md
-          gh release create "v$NR_VERSION" nos-racines.apk mise-a-jour.zip latest.json \
+          gh release create "v$NR_VERSION" nos-racines.apk mise-a-jour.zip iphone.zip latest.json \
             --draft --title "NOS RACINES $NR_VERSION" --notes-file corps.md --target "$GITHUB_SHA"
-
-  # Page publique des QR codes (fiches et arbre lisibles par n'importe quel téléphone).
-  # Seule la page « voir » est publiée : ni l'application, ni la photo du générique.
-  pages:
-    runs-on: ubuntu-latest
-    continue-on-error: true
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-    env:
-      REPO: ${{ github.repository }}
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
-      - name: Page publique
-        run: |
-          export VITE_APK_URL="https://github.com/$REPO/releases/latest/download/nos-racines.apk"
-          npx vite build
-          mkdir -p site
-          cp dist/voir.html site/voir.html
-          cp dist/voir.html site/index.html
-          cp -r dist/assets site/assets
-          cp dist/icon.svg site/icon.svg
-          rm -f site/assets/*.jpg site/assets/*.jpeg
-      - uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-      - uses: actions/deploy-pages@v4

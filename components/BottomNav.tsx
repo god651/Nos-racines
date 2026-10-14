@@ -37,7 +37,7 @@ export function BottomNav() {
   const path = usePathname();
   const t = useT();
   return (
-    <nav data-main-nav aria-label={t("Navigation principale")} className="sticky bottom-0 z-20 grid h-[84px] grid-cols-5 items-center border-t border-kapok bg-coton/90 px-3 pb-5 pt-2 backdrop-blur-xl">
+    <nav data-main-nav aria-label={t("Navigation principale")} className="sticky bottom-0 z-20 grid min-h-[84px] grid-cols-5 items-center border-t border-kapok bg-coton/90 px-3 pb-[max(20px,env(safe-area-inset-bottom))] pt-2 backdrop-blur-xl">
       {ITEMS.map((it) =>
         it.icon === null ? (
           <Link key={it.href} href={it.href} aria-label={t(it.label)} className="flex justify-center">

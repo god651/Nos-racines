@@ -1,0 +1,18 @@
+{
+  "name": "NOS RACINES",
+  "short_name": "Nos Racines",
+  "description": "Les visages, les voix et les histoires de la famille.",
+  "lang": "fr",
+  "id": "./",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#12261A",
+  "theme_color": "#12261A",
+  "icons": [
+    { "src": "./icones/icone-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "./icones/icone-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "./icones/icone-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

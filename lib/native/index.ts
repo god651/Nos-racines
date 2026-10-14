@@ -9,6 +9,14 @@ export const UPDATE_FEED: string = import.meta.env.VITE_UPDATE_FEED || "";
 /** Page où télécharger l'application Android (pour l'installer chez un proche). */
 export const APK_URL: string = import.meta.env.VITE_APK_URL || "";
 export const RELEASES_URL: string = import.meta.env.VITE_RELEASES_URL || "";
+/** Adresse de l'application pour iPhone (version web installée sur l'écran d'accueil). */
+export const WEB_APP_URL: string = import.meta.env.VITE_WEB_APP_URL || "";
+/** Cette page est la version installable (iPhone) publiée sur la page GitHub. */
+export const isPwa = !isNative && import.meta.env.VITE_PWA === "1";
+export const isIOS = typeof navigator !== "undefined" && (/iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1));
+/** Ouverte depuis l'icône de l'écran d'accueil (et non dans un onglet de Safari). */
+export const isStandalone = () =>
+  typeof window !== "undefined" && (window.matchMedia?.("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true);
 
 export async function initNative(onBack: () => boolean) {
   if (!isNative) return;

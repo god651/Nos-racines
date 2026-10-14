@@ -145,8 +145,10 @@ export function SharedTree({ card }: { card: TreeCard }) {
 }
 
 /** Pied de page de la page publique : le logo et le lien pour installer l'application. */
-export function SharedFooter({ apkUrl }: { apkUrl?: string }) {
+export function SharedFooter({ apkUrl, webUrl }: { apkUrl?: string; webUrl?: string }) {
   const t = useT();
+  const ios = typeof navigator !== "undefined" && /iPhone|iPad|iPod/.test(navigator.userAgent);
+  if (ios && webUrl) apkUrl = undefined;
   return (
     <div className="flex flex-col items-center gap-2 text-center">
       <Logo size={44} />
@@ -155,6 +157,11 @@ export function SharedFooter({ apkUrl }: { apkUrl?: string }) {
       {apkUrl && (
         <a href={apkUrl} className="mt-1 rounded-full border border-or/50 px-4 py-2 text-[13px] text-or-pale">
           {t("Installer l’application (Android)")}
+        </a>
+      )}
+      {webUrl && (ios || !apkUrl) && (
+        <a href={webUrl} className="mt-1 rounded-full border border-or/50 px-4 py-2 text-[13px] text-or-pale">
+          {t("Installer l’application (iPhone)")}
         </a>
       )}
     </div>

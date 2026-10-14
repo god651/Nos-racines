@@ -1,4 +1,4 @@
-import { isNative } from "@/lib/native";
+import { isNative, isPwa } from "@/lib/native";
 import { buildBackup } from "./backup";
 import { kv, onMutate, read } from "./store-core";
 
@@ -111,7 +111,16 @@ export function startAutosave() {
       if (!read().family) return;
       const fp = fingerprint();
       if (fp === lastPrint) return;
-      if (getMode() === "auto") {
+      if (isPwa) {
+        // Sur iPhone, pas de fichier qui se met à jour tout seul : tout reste dans le téléphone,
+        // et tous les trois jours au plus, une petite notification propose d'en garder une copie dans Fichiers.
+        lastPrint = fp;
+        const asked = Number(kv.get("nr_sauvegarde_demande") ?? 0);
+        const saved = lastSaved() ?? 0;
+        if (Date.now() - Math.max(asked, saved) < 3 * 86400000) return;
+        kv.set("nr_sauvegarde_demande", String(Date.now()));
+        set({ pending: true, ask: true });
+      } else if (getMode() === "auto") {
         set({ pending: true });
         void saveNow();
       } else {

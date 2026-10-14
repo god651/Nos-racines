@@ -9,8 +9,10 @@ import "@/app/globals.css";
 import { createRoot } from "react-dom/client";
 import { initStore } from "@/lib/local/store-core";
 import { startBackgroundGuard } from "@/lib/background";
+import { startPwa } from "@/lib/pwa";
 import { App } from "./App";
 
 const root = createRoot(document.getElementById("root")!);
 startBackgroundGuard();
+startPwa();
 void initStore().then(() => root.render(<App />));

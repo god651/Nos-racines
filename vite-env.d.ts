@@ -5,4 +5,6 @@ interface ImportMetaEnv {
   readonly VITE_VIEW_URL?: string;
   readonly VITE_APK_URL?: string;
   readonly VITE_RELEASES_URL?: string;
+  readonly VITE_WEB_APP_URL?: string;
+  readonly VITE_PWA?: string;
 }

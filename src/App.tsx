@@ -13,6 +13,7 @@ import { getDataVersion, kv, legacy, persistent, read, subscribeData } from "@/l
 import { LegacyPrompt } from "@/components/LegacyPrompt";
 import { UpdateHost } from "@/components/UpdateHost";
 import { initNative, isNative } from "@/lib/native";
+import { PwaHost } from "@/components/PwaHost";
 import { back as routerBack } from "@/lib/local/router";
 import { getRoute, getRouteVersion, match, navigate, subscribeRoute } from "@/lib/local/router";
 import Onboarding from "@/app/page";
@@ -143,6 +144,7 @@ export function App() {
       </div>
       {!persistent && !isNative && <DemoNotice />}
       <UpdateHost blocked={intro || showGuide || !!legacy} />
+      <PwaHost blocked={intro || showGuide || !!legacy} />
       <CoffreHost me={viewer.user} blocked={intro || showGuide || !!legacy || route.path === "/"} />
       <SaveHost blocked={intro || showGuide || !!legacy || route.path === "/" || !viewer.user} />
       <ConfirmHost />
