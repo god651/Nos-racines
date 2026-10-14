@@ -18,7 +18,7 @@ export const LANGS: { code: Lang; label: string; native: string }[] = [
   { code: "fr", label: tx("Français"), native: "Français" },
   { code: "en", label: tx("Anglais"), native: "English" },
   { code: "bci", label: tx("Baoulé"), native: "Baoulé" },
-  { code: "dyu", label: tx("Dioula"), native: "Julakan" },
+  { code: "dyu", label: tx("Dioula"), native: "Dioula" },
 ];
 
 export function makeT(dict: Dict): T {
