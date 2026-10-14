@@ -54,7 +54,7 @@ export interface Union {
   partnerB: string;
   kind: UnionKind;
   rank?: number; // 1re, 2e épouse…
-  /** Couple séparé (divorce, séparation) et l'année. Le lien dans l'arbre devient une vague. */
+  /** Couple séparé (divorce, séparation) et l'année. Le lien dans l'arbre est en pointillés. */
   separated?: boolean;
   separatedYear?: number;
 }

@@ -1,7 +1,8 @@
 Nouveautés :
-• Couples séparés : case « Séparés » et année ; dans l'arbre, le lien devient une vague.
+• Couples séparés : case « Séparés » et année ; dans l'arbre, le lien devient des pointillés.
 • Choisir le père et la mère de chacun (demi-frères et demi-sœurs).
 • Dates tapées au clavier (jour, mois, année), sans calendrier à faire défiler.
 • Le titre « Fondateur » et l'espace du fondateur sont réservés au créateur de l'application.
 • QR code « Rejoindre » scanné sur un autre téléphone : marche à suivre claire au lieu d'une erreur.
 • Le son se coupe dès qu'on quitte l'application, comme les autres applications.
+• Arbre plus intelligent : chaque couple au-dessus de ses propres enfants, les demi-frères et demi-sœurs bien séparés, les unions multiples rangées par rang.

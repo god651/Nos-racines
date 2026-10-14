@@ -35,7 +35,7 @@ export interface Link {
   id: string;
   d: string;
   kind: "union" | "child" | "fostered";
-  /** Couple séparé : le lien est une vague (et l'année de séparation). */
+  /** Couple séparé : le lien est en pointillés (et l'année de séparation). */
   separated?: boolean;
   sepYear?: number;
   rank?: number;
@@ -71,6 +71,8 @@ export function layoutTree(persons: Person[], parentages: Parentage[], unions: U
     spouseOf.set(u.partnerA, [...(spouseOf.get(u.partnerA) ?? []), u.partnerB]);
     spouseOf.set(u.partnerB, [...(spouseOf.get(u.partnerB) ?? []), u.partnerA]);
   }
+  const pairKey = (a: string, b: string) => (a < b ? `${a}|${b}` : `${b}|${a}`);
+  const unionOf = new Map(unions.map((u) => [pairKey(u.partnerA, u.partnerB), u]));
   const childrenOf = new Map<string, string[]>();
   for (const pa of parentages) for (const par of pa.parentIds) if (gens.has(par)) childrenOf.set(par, [...(childrenOf.get(par) ?? []), pa.childId]);
   const byId = new Map(persons.map((p) => [p.id, p]));
@@ -135,7 +137,17 @@ export function layoutTree(persons: Person[], parentages: Parentage[], unions: U
       const sRight = inlawSp.length ? side === 1 : byId.get(s)?.sex === "f" || (byId.get(s)?.sex === byId.get(pid)?.sex);
       members = sRight ? [pid, s] : [s, pid];
     } else if (spouses.length > 1) {
-      const ordered = [...inlawSp, ...otherSp];
+      // Plusieurs unions : la 1re épouse (ou l'union en cours) juste à côté, les suivantes ensuite,
+      // en alternant les côtés ; les ex-conjoints (séparés) au bout. Un conjoint venu d'une famille
+      // présente dans l'arbre reste du côté où sa famille sera placée.
+      const u = (sp: string) => unionOf.get(pairKey(pid, sp));
+      const ordered = [...spouses].sort(
+        (a, b) =>
+          Number(!!u(a)?.separated) - Number(!!u(b)?.separated) ||
+          Number(!hasParents(a)) - Number(!hasParents(b)) ||
+          (u(a)?.rank ?? 99) - (u(b)?.rank ?? 99) ||
+          byAge(a, b),
+      );
       const near = ordered.filter((_, i) => i % 2 === 0);
       const far = ordered.filter((_, i) => i % 2 === 1);
       members = side === 1 ? [...far.reverse(), pid, ...near] : [...near.reverse(), pid, ...far];
@@ -170,23 +182,41 @@ export function layoutTree(persons: Person[], parentages: Parentage[], unions: U
 
     const xs = new Map<string, number>();
     const contour: Contour = new Map();
-    const anchors: number[] = [];
+    // Position de chaque enfant, rangée par couple de parents (pour centrer chaque couple sur SES enfants).
+    const byGroup = new Map<number, number[]>();
+    let prevKey: number | undefined;
     for (const c of ordered) {
       if (visited.has(c)) continue;
       const sub = layoutUnit(c, kidSide.get(c) ?? side);
-      const dx = contour.size ? clearance(contour, sub.contour, 1, MIN_GAP) : -sub.anchor;
-      const shift = Number.isFinite(dx) ? dx : (Math.max(...[...contour.values()].map((v) => v[1])) + MIN_GAP - Math.min(...[...sub.contour.values()].map((v) => v[0])));
+      const key = groupKey(c);
+      // Un peu plus d'air entre les enfants de deux unions différentes (demi-frères et demi-sœurs).
+      const gap = prevKey !== undefined && key !== prevKey ? MIN_GAP + 26 : MIN_GAP;
+      prevKey = key;
+      const dx = contour.size ? clearance(contour, sub.contour, 1, gap) : -sub.anchor;
+      const shift = Number.isFinite(dx) ? dx : (Math.max(...[...contour.values()].map((v) => v[1])) + gap - Math.min(...[...sub.contour.values()].map((v) => v[0])));
       for (const [id, x] of sub.xs) xs.set(id, x + shift);
       mergeContour(contour, sub.contour, shift);
-      anchors.push(sub.anchor + shift);
+      byGroup.set(key, [...(byGroup.get(key) ?? []), sub.anchor + shift]);
     }
-    // Le foyer se centre au-dessus de ses enfants.
+    // Le foyer se place pour que chaque couple soit au-dessus de ses propres enfants
+    // (moindres carrés : la moyenne des écarts), et sinon la personne et son conjoint au centre.
     const width = (members.length - 1) * MIN_GAP;
-    const center = anchors.length ? (anchors[0] + anchors[anchors.length - 1]) / 2 : 0;
-    // On centre le couple (la personne et le conjoint) plutôt que tout le foyer.
     const pi = members.indexOf(pid);
-    const coupleMid = members.length > 1 ? (pi + (pi === 0 ? 0.5 : -0.5)) * MIN_GAP : 0;
-    const start = center - (members.length > 2 ? width / 2 : coupleMid);
+    let start: number;
+    if (byGroup.size) {
+      let sum = 0;
+      let n = 0;
+      for (const [key, list] of byGroup) {
+        const target = (Math.min(...list) + Math.max(...list)) / 2;
+        const w = list.length;
+        sum += (target - key * MIN_GAP) * w;
+        n += w;
+      }
+      start = sum / n;
+    } else {
+      const coupleMid = members.length > 1 ? (pi + (pi === 0 ? 0.5 : -0.5)) * MIN_GAP : 0;
+      start = -(members.length > 2 ? width / 2 : coupleMid);
+    }
     members.forEach((m, i) => xs.set(m, start + i * MIN_GAP));
     const g0 = gen(pid);
     const row: [number, number] = [start, start + width];
@@ -280,25 +310,40 @@ export function layoutTree(persons: Person[], parentages: Parentage[], unions: U
     const b = pos.get(u.partnerB);
     if (!a || !b) continue;
     const [l, r] = a.x < b.x ? [a, b] : [b, a];
-    let d = a.y === b.y ? `M${l.x + l.r} ${l.y} H${r.x - r.r}` : `M${l.x} ${l.y} L${r.x} ${r.y}`;
-    if (u.separated && a.y === b.y) {
-      // Une vague douce entre ex-conjoints.
-      const x0 = l.x + l.r + 2;
-      const x1 = r.x - r.r - 2;
-      const n = Math.max(2, Math.round((x1 - x0) / 9));
-      const step = (x1 - x0) / n;
-      d = `M${x0} ${l.y}`;
-      for (let i = 0; i < n; i++) d += ` q${(step / 2).toFixed(1)} ${i % 2 ? 4 : -4} ${step.toFixed(1)} 0`;
-    }
-    links.push({ id: u.id, d, kind: "union", rank: u.rank, separated: !!u.separated, sepYear: u.separatedYear, label: { x: (l.x + r.x) / 2, y: l.y - 8 }, delay: 0.3 });
+    // Quelqu'un entre les deux conjoints (plusieurs unions) : le lien passe au-dessus, en arc, sans le traverser.
+    const between = a.y === b.y && [...pos.values()].some((n) => n.y === l.y && n.x > l.x && n.x < r.x);
+    const d =
+      a.y !== b.y
+        ? `M${l.x} ${l.y} L${r.x} ${r.y}`
+        : between
+          ? `M${l.x} ${l.y - l.r} Q${(l.x + r.x) / 2} ${l.y - l.r - Math.min(46, 16 + (r.x - l.x) / 6)} ${r.x} ${r.y - r.r}`
+          : `M${l.x + l.r} ${l.y} H${r.x - r.r}`;
+    const arcTop = l.y - l.r - Math.min(46, 16 + (r.x - l.x) / 6) / 2 - 4;
+    links.push({ id: u.id, d, kind: "union", rank: u.rank, separated: !!u.separated, sepYear: u.separatedYear, label: { x: (l.x + r.x) / 2, y: between ? arcTop : l.y - 8 }, delay: 0.3 });
   }
-  for (const pa of parentages) {
+  const bars = new Map<string, number>();
+  const barsAtRow = new Map<number, number>();
+  for (const pa of [...parentages].sort((a, b) => (pos.get(a.parentIds[0])?.x ?? 0) - (pos.get(b.parentIds[0])?.x ?? 0))) {
     const child = pos.get(pa.childId);
     const parents = pa.parentIds.map((id) => pos.get(id)).filter(Boolean) as NodePos[];
     if (!child || !parents.length) continue;
-    const sx = parents.reduce((s, p) => s + p.x, 0) / parents.length;
-    const sy = parents.length > 1 && parents[0].y === parents[1].y ? parents[0].y : parents[0].y + parents[0].r;
-    const midY = Math.round((sy + child.y - child.r) / 2 + 10);
+    let sx = parents.reduce((s, p) => s + p.x, 0) / parents.length;
+    let sy = parents.length > 1 && parents[0].y === parents[1].y ? parents[0].y : parents[0].y + parents[0].r;
+    // Parents séparés par une autre personne (plusieurs unions) : le lien part du parent qui n'a
+    // que cette union (2e épouse, ex-conjoint), pour ne jamais sembler partir de la personne du milieu.
+    if (parents.length === 2 && parents[0].y === parents[1].y) {
+      const [l, r] = parents[0].x < parents[1].x ? [parents[0], parents[1]] : [parents[1], parents[0]];
+      if ([...pos.values()].some((n) => n.y === l.y && n.x > l.x && n.x < r.x)) {
+        const nU = (id: string) => unions.filter((u) => u.partnerA === id || u.partnerB === id).length;
+        const own = nU(l.id) <= nU(r.id) ? l : r;
+        sx = own.x;
+        sy = own.y + own.r;
+      }
+    }
+    // Chaque couple a sa propre barre horizontale : deux familles voisines ne se mélangent pas.
+    const barKey = `${Math.round(sx)}:${sy}`;
+    if (!bars.has(barKey)) bars.set(barKey, (barsAtRow.get(sy) ?? 0) % 3), barsAtRow.set(sy, (barsAtRow.get(sy) ?? 0) + 1);
+    const midY = Math.round((sy + child.y - child.r) / 2 + 10 - bars.get(barKey)! * 9);
     links.push({ id: `${pa.parentIds.join("-")}>${pa.childId}`, d: `M${sx} ${sy} V${midY} H${child.x} V${child.y - child.r}`, kind: pa.kind === "biological" ? "child" : "fostered", delay: 0.4 + child.generation * 0.35 });
   }
 
