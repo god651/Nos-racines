@@ -42,6 +42,8 @@ export interface Person {
   deathDate?: string;
   /** Case « à compléter » créée pour relier deux personnes (ex. le père inconnu d'un cousin). */
   placeholder?: boolean;
+  /** La personne a déjà complété sa propre fiche (une seule fois ; ensuite, seuls les administrateurs). */
+  selfEditedAt?: number;
   qrCode: string; // code court imprimé sous le portrait (ex. 7K3F)
   visibility: Visibility; // « public » = visible par le QR code, sans compte
   timeline: TimelineEvent[];

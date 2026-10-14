@@ -45,6 +45,8 @@ interface Props {
   isMe?: boolean;
   /** Ajout par lien de parenté : personne de référence et lien proposé. */
   anchor?: { id: string; relation?: Relation; choices: Record<string, KinChoices> };
+  /** Un membre complète sa propre fiche : une seule fois, sans toucher aux liens de parenté. */
+  selfOnce?: boolean;
 }
 
 function Section({ title, open, onToggle, children }: { title: string; open: boolean; onToggle: () => void; children: React.ReactNode }) {
@@ -67,7 +69,7 @@ function Section({ title, open, onToggle, children }: { title: string; open: boo
   );
 }
 
-export function PersonForm({ person, options, initial, backHref, defaultFamilyName, isMe, anchor }: Props) {
+export function PersonForm({ person, options, initial, backHref, defaultFamilyName, isMe, anchor, selfOnce }: Props) {
   const t = useT();
   const router = useRouter();
   const p = person;
@@ -122,6 +124,7 @@ export function PersonForm({ person, options, initial, backHref, defaultFamilyNa
       setOpen({ ...open, id: true });
       return;
     }
+    if (selfOnce && !(await askConfirm(t("Vous ne pourrez compléter votre fiche qu’une seule fois. Ensuite, seul un administrateur pourra la modifier. Enregistrer maintenant ?")))) return;
     setBusy(true);
     setError(null);
     const byKin = !p && kin.relation && kin.anchorId;
@@ -166,6 +169,11 @@ export function PersonForm({ person, options, initial, backHref, defaultFamilyNa
     <main className="min-h-dvh bg-kapok pb-10">
       <PageHeader back={backHref} kicker={p ? t("modifier la fiche") : t("nouvelle personne")} title={p ? `${p.givenName} ${p.familyName}`.trim() : t("Ajouter une personne")} />
       <form onSubmit={save} className="flex flex-col gap-3 px-4">
+        {selfOnce && (
+          <p className="rounded-[16px] border border-or bg-or/10 px-4 py-3 text-[13px] leading-relaxed text-[#5A4A22]">
+            {t("C’est votre fiche : vous pouvez la compléter une seule fois, définitivement. Prenez le temps de tout vérifier avant d’enregistrer. Les liens de parenté, eux, sont réglés par les administrateurs.")}
+          </p>
+        )}
         {!p && others.length > 0 && <KinSection kin={kin} setKin={setKin} options={others} choices={anchor?.choices ?? {}} />}
         <Section title={t("Identité")} open={open.id} onToggle={toggle("id")}>
           <PhotosPicker value={photos} onChange={setPhotos} isPublic={f.visibility === "public"} />
@@ -203,7 +211,7 @@ export function PersonForm({ person, options, initial, backHref, defaultFamilyNa
           )}
         </Section>
 
-        {!(!p && kin.relation) && <Section title={t("Liens familiaux")} open={open.liens} onToggle={toggle("liens")}>
+        {!(!p && kin.relation) && !selfOnce && <Section title={t("Liens familiaux")} open={open.liens} onToggle={toggle("liens")}>
           {others.length === 0 ? (
             <p className="text-sm text-[#6B6455]">{t("C’est la première personne de l’arbre. Les liens pourront être ajoutés avec les personnes suivantes.")}</p>
           ) : (

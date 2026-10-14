@@ -118,10 +118,10 @@ export function TreeView({ layout, mode, familyName, startId }: { layout: TreeLa
             ))}
             {layout.links.map((l) => (
               <g key={l.id}>
-                <motion.path d={l.d} fill="none" stroke={l.kind === "union" ? (l.separated ? "rgba(200,161,90,0.75)" : "#C8A15A") : "rgba(200,161,90,0.65)"} strokeWidth={l.kind === "union" ? (l.separated ? 2 : 1.5) : 1.25} strokeLinecap="round" strokeDasharray={l.kind === "fostered" ? "3 4" : l.separated ? "1.5 5" : undefined}
+                <motion.path d={l.d} fill="none" stroke={l.kind === "union" ? (l.separated ? "rgba(200,161,90,0.75)" : "#C8A15A") : l.kind === "fostered" ? "rgba(200,161,90,0.4)" : "rgba(200,161,90,0.65)"} strokeWidth={l.kind === "union" ? (l.separated ? 2 : 1.5) : 1.25} strokeLinecap="round" strokeDasharray={l.separated ? "1.5 5" : undefined}
                   // Le tracé animé efface les pointillés : les liens en pointillés apparaissent en fondu.
-                  initial={l.kind === "fostered" || l.separated ? { opacity: 0 } : { pathLength: 0 }}
-                  animate={l.kind === "fostered" || l.separated ? { opacity: 1 } : { pathLength: 1 }}
+                  initial={l.separated ? { opacity: 0 } : { pathLength: 0 }}
+                  animate={l.separated ? { opacity: 1 } : { pathLength: 1 }}
                   transition={{ delay: l.delay, duration: 1.6, ease: [0.4, 0, 0.2, 1] }}
                 />
                 {l.kind === "child" && <path d={l.d} className="nr-sap" fill="none" stroke="#FFE3A6" strokeWidth="2.5" strokeLinecap="round" style={{ animationDelay: `${2 + l.delay * 2}s` }} />}

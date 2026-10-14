@@ -56,6 +56,8 @@ export interface MemberData {
   children: RelLink[];
   siblings: RelLink[];
   isMe: boolean;
+  /** Le membre peut encore compléter sa propre fiche (une seule fois). */
+  canSelfEdit?: boolean;
   qrSvg: string;
   qrLink: string;
   isAdmin: boolean;
@@ -253,6 +255,15 @@ export function MemberView({ d }: { d: MemberData }) {
                 <span className="font-serif text-[22px] italic text-or">Yako</span>
                 <span className="flex-1 text-[13px] text-or-pale">{t("Son mémorial : bougies, mots et prières")}</span>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#C8A15A" strokeWidth="2" aria-hidden><path d="M9 5l7 7-7 7" /></svg>
+              </Link>
+            </div>
+          )}
+
+          {d.canSelfEdit && (
+            <div className="px-5 pt-4">
+              <Link href={`/membre/${d.id}/modifier`} className="block rounded-[18px] border border-or bg-or/10 px-4 py-3 text-[13px] leading-relaxed text-[#5A4A22]">
+                <span className="block font-semibold text-foret">{t("Compléter ma fiche")}</span>
+                {t("Ajoutez vos dates, votre histoire, vos photos. Une seule fois : ensuite, seul un administrateur pourra la changer.")}
               </Link>
             </div>
           )}

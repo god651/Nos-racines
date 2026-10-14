@@ -1,14 +1,29 @@
 import type { NextRequest } from "next/server";
-import { body, fail, needAdmin, ok } from "@/lib/server/api";
+import { body, fail, needAdmin, needMember, ok } from "@/lib/server/api";
 import { applyPerson, applyRelations } from "@/lib/server/persons";
 import { mutate, read } from "@/lib/server/store";
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { err } = needAdmin(req);
+  const { v, err } = needMember(req);
   if (err) return err;
   const { id } = await params;
-  if (!read().persons.some((p) => p.id === id)) return fail("Personne introuvable", 404);
+  const cur = read().persons.find((p) => p.id === id);
+  if (!cur) return fail("Personne introuvable", 404);
   const b = await body(req);
+  if (!v.isAdmin) {
+    // Un membre peut compléter SA fiche une seule fois ; ensuite, seuls les administrateurs la modifient.
+    if (v.user!.personId !== id) return fail("Action réservée aux administrateurs.", 403);
+    if (cur.selfEditedAt) return fail("Vous avez déjà complété votre fiche. Pour la changer encore, demandez à un administrateur.", 403);
+    await mutate((s) => {
+      const p = s.persons.find((x) => x.id === id)!;
+      // Ses informations seulement : les liens de parenté restent l'affaire des administrateurs.
+      const { parents: _a, spouses: _b, children: _c, parentKind: _d, ...own } = b as Record<string, unknown>;
+      void _a, _b, _c, _d;
+      applyPerson(p, { ...own, complete: true });
+      p.selfEditedAt = Date.now();
+    });
+    return ok({ id });
+  }
   await mutate((s) => {
     const p = s.persons.find((x) => x.id === id)!;
     applyPerson(p, { ...b, complete: true });

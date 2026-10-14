@@ -930,4 +930,9 @@ export const EN: Record<string, string> = {
   "séparés": "separated",
   "séparés en {a}": "separated in {a}",
   "— Inconnu(e) —": "— Unknown —",
+  "Ajoutez vos dates, votre histoire, vos photos. Une seule fois : ensuite, seul un administrateur pourra la changer.": "Add your dates, your story, your photos. Only once: after that, only an administrator can change it.",
+  "Compléter ma fiche": "Complete my profile",
+  "C’est votre fiche : vous pouvez la compléter une seule fois, définitivement. Prenez le temps de tout vérifier avant d’enregistrer. Les liens de parenté, eux, sont réglés par les administrateurs.": "This is your profile: you can complete it only once, for good. Take time to check everything before saving. Family links are set by the administrators.",
+  "Vous avez déjà complété votre fiche. Pour la changer encore, demandez à un administrateur.": "You have already completed your profile. To change it again, ask an administrator.",
+  "Vous ne pourrez compléter votre fiche qu’une seule fois. Ensuite, seul un administrateur pourra la modifier. Enregistrer maintenant ?": "You can complete your profile only once. After that, only an administrator can change it. Save now?",
 };

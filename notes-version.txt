@@ -6,3 +6,4 @@ Nouveautés :
 • QR code « Rejoindre » scanné sur un autre téléphone : marche à suivre claire au lieu d'une erreur.
 • Le son se coupe dès qu'on quitte l'application, comme les autres applications.
 • Arbre plus intelligent : chaque couple au-dessus de ses propres enfants, les demi-frères et demi-sœurs bien séparés, les unions multiples rangées par rang.
+• Chaque membre peut compléter sa propre fiche une seule fois ; ensuite, seuls les administrateurs la modifient.
