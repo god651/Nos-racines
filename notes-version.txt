@@ -4,3 +4,4 @@ Nouveautés :
 • Dates tapées au clavier (jour, mois, année), sans calendrier à faire défiler.
 • Le titre « Fondateur » et l'espace du fondateur sont réservés au créateur de l'application.
 • QR code « Rejoindre » scanné sur un autre téléphone : marche à suivre claire au lieu d'une erreur.
+• Le son se coupe dès qu'on quitte l'application, comme les autres applications.

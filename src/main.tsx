@@ -8,7 +8,9 @@ import "@fontsource/caveat/500.css";
 import "@/app/globals.css";
 import { createRoot } from "react-dom/client";
 import { initStore } from "@/lib/local/store-core";
+import { startBackgroundGuard } from "@/lib/background";
 import { App } from "./App";
 
 const root = createRoot(document.getElementById("root")!);
+startBackgroundGuard();
 void initStore().then(() => root.render(<App />));

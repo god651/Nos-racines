@@ -71,6 +71,15 @@ class SoundEngine {
     return () => this.listeners.delete(fn);
   }
 
+  /** L'application passe en arrière-plan : tout se tait, comme les autres applications. */
+  sleep() {
+    if (this.ctx && this.ctx.state === "running") void this.ctx.suspend().catch(() => undefined);
+  }
+  /** Retour dans l'application : l'ambiance reprend doucement (si le son est activé). */
+  wake() {
+    if (this.ctx && this.enabled && this.ctx.state === "suspended") void this.ctx.resume().catch(() => undefined);
+  }
+
   /** Doit être appelé après un geste de l'utilisateur (règle des navigateurs). */
   async unlock() {
     if (!this.enabled) return;

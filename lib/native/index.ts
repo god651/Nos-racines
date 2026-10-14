@@ -23,6 +23,8 @@ export async function initNative(onBack: () => boolean) {
   });
   // Retour dans l'application : le générique se rejoue.
   void App.addListener("resume", () => window.dispatchEvent(new Event("nr-resume")));
+  // Sortie de l'application : on coupe le son (voir lib/background.ts).
+  void App.addListener("pause", () => window.dispatchEvent(new Event("nr-pause")));
   setTimeout(() => void SplashScreen.hide(), 300);
 }
 
