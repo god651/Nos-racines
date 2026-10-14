@@ -1,3 +1,4 @@
+import { openDateOf } from "@/lib/local/coffre";
 import { redirect } from "next/navigation";
 import { FounderView, type FeedItem } from "@/components/FounderView";
 import { requireMember } from "@/lib/server/page";
@@ -19,7 +20,7 @@ export default async function FondateurPage() {
     ...s.tributes.map((x) => ({ at: x.createdAt, kind: x.kind === "candle" ? ("bougie" as const) : ("mot" as const), text: personName(x.personId), who: x.byName })),
     ...s.quizScores.map((x) => ({ at: x.createdAt, kind: "quiz" as const, text: `${x.points} pts`, who: x.name })),
     ...s.users.map((u) => ({ at: u.createdAt, kind: "compte" as const, text: u.name })),
-    ...s.capsules.map((c) => ({ at: c.createdAt, kind: "capsule" as const, text: String(c.openYear), who: c.byName })),
+    ...s.capsules.map((c) => ({ at: c.createdAt, kind: "capsule" as const, text: openDateOf(c), who: c.byName })),
   ].sort((a, b) => b.at - a.at);
   const lastSeen = new Map<string, number>();
   for (const se of s.sessions) lastSeen.set(se.userId, Math.max(lastSeen.get(se.userId) ?? 0, se.createdAt));

@@ -7,7 +7,8 @@ import { applyRemote, idbGet, idbPut, kv, mediaBlob, newId, onMutate, putMedia, 
 // Partage en direct entre les téléphones de la famille.
 // Chaque téléphone garde toute la famille (l'application marche sans Internet) ;
 // quand il y a du réseau, il envoie ce qui a changé et reçoit ce que les autres ont fait.
-// Les capsules du temps et les connexions restent dans chaque téléphone.
+// Les coffres du futur voyagent chiffrés (leur clé est confiée au gardien, jamais aux autres téléphones) ;
+// les connexions restent dans chaque téléphone.
 // ═══════════════════════════════════════════════════════════════════
 
 const URL_ = (import.meta.env.VITE_SUPABASE_URL as string | undefined) || nuage.url;
@@ -56,8 +57,8 @@ async function rpc<T>(fn: string, args: Record<string, unknown>): Promise<T> {
 }
 
 // ─── Ce qui voyage ───
-type Coll = "family" | "settings" | "translations" | "users" | "invites" | "persons" | "unions" | "parentages" | "stories" | "memories" | "media" | "tributes" | "quizScores";
-const LISTS: Coll[] = ["users", "invites", "persons", "unions", "parentages", "stories", "memories", "media", "tributes", "quizScores"];
+type Coll = "family" | "settings" | "translations" | "users" | "invites" | "persons" | "unions" | "parentages" | "stories" | "memories" | "media" | "tributes" | "quizScores" | "capsules";
+const LISTS: Coll[] = ["users", "invites", "persons", "unions", "parentages", "stories", "memories", "media", "tributes", "quizScores", "capsules"];
 const idOf = (coll: Coll, x: Record<string, unknown>) => String(coll === "parentages" ? x.childId : x.id);
 
 const canon = (v: unknown): string =>
@@ -383,4 +384,27 @@ export async function fetchPublicPhoto(fid: string, mid: string): Promise<Blob |
   } catch {
     return null;
   }
+}
+
+// ─── Gardien des coffres du futur ───
+/** Confie la clé d'un coffre au gardien en ligne (il ne la rendra qu'à la date d'ouverture). */
+export async function coffrePublishKey(cid: string, ckey: string, code: string, openAt: string): Promise<boolean> {
+  const link = getLink();
+  if (!cloudAvailable || !link) return false;
+  await rpc("nr_coffre_put", { fid: link.fid, fkey: link.key, cid, open_at: openAt, ckey, code });
+  return true;
+}
+/** L'auteur retrouve la clé de son coffre (nouveau téléphone) avec son code. */
+export async function coffreAuthorKey(cid: string, code: string): Promise<string | null> {
+  const link = getLink();
+  if (!cloudAvailable || !link) return null;
+  const rows = await rpc<{ ckey: string }[]>("nr_coffre_author", { fid: link.fid, fkey: link.key, cid, code }).catch(() => []);
+  return rows?.[0]?.ckey ?? null;
+}
+/** Le jour venu (heure du serveur), le gardien rend la clé et le code aux bénéficiaires. */
+export async function coffreReleasedKey(cid: string): Promise<{ key: string; code: string } | null> {
+  const link = getLink();
+  if (!cloudAvailable || !link) return null;
+  const rows = await rpc<{ ckey: string; code: string }[]>("nr_coffre_get", { fid: link.fid, fkey: link.key, cid });
+  return rows?.[0] ? { key: rows[0].ckey, code: rows[0].code } : null;
 }

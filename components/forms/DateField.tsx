@@ -11,13 +11,15 @@ const split = (v: string) => {
   const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(v || "");
   return m ? { d: m[3], m: m[2], y: m[1] } : { d: "", m: "", y: "" };
 };
-const valid = (d: string, m: string, y: string) => {
+const valid = (d: string, m: string, y: string, future = false) => {
   if (d.length < 1 || m.length < 1 || y.length !== 4) return false;
   const dt = new Date(Number(y), Number(m) - 1, Number(d));
-  return dt.getFullYear() === Number(y) && dt.getMonth() === Number(m) - 1 && dt.getDate() === Number(d) && Number(y) >= 1800 && dt.getTime() <= Date.now() + 864e5;
+  const real = dt.getFullYear() === Number(y) && dt.getMonth() === Number(m) - 1 && dt.getDate() === Number(d);
+  // Date passée (naissance, décès) ou date à venir (ouverture d'un coffre du futur).
+  return real && (future ? dt.getTime() > Date.now() && Number(y) <= 2200 : Number(y) >= 1800 && dt.getTime() <= Date.now() + 864e5);
 };
 
-export function DateField({ label, value, onChange, hint }: { label: string; value: string; onChange: (v: string) => void; hint?: string }) {
+export function DateField({ label, value, onChange, hint, future = false }: { label: string; value: string; onChange: (v: string) => void; hint?: string; future?: boolean }) {
   const t = useT();
   const lang = useLang();
   const init = split(value);
@@ -29,7 +31,7 @@ export function DateField({ label, value, onChange, hint }: { label: string; val
   // Une valeur venue d'ailleurs (fiche rechargée) remplace la saisie.
   useEffect(() => {
     const s = split(value);
-    const cur = valid(d, m, y) ? `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}` : "";
+    const cur = valid(d, m, y, future) ? `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}` : "";
     if (value !== cur && (value || cur)) {
       setD(s.d);
       setM(s.m);
@@ -39,11 +41,11 @@ export function DateField({ label, value, onChange, hint }: { label: string; val
 
   const push = (nd: string, nm: string, ny: string) => {
     if (!nd && !nm && !ny) return onChange("");
-    onChange(valid(nd, nm, ny) ? `${ny}-${nm.padStart(2, "0")}-${nd.padStart(2, "0")}` : "");
+    onChange(valid(nd, nm, ny, future) ? `${ny}-${nm.padStart(2, "0")}-${nd.padStart(2, "0")}` : "");
   };
   const digits = (s: string, n: number) => s.replace(/\D/g, "").slice(0, n);
 
-  const complete = valid(d, m, y);
+  const complete = valid(d, m, y, future);
   const partial = (d || m || y) && !complete;
   const words = complete ? new Date(Number(y), Number(m) - 1, Number(d)).toLocaleDateString(lang === "en" ? "en-GB" : "fr-FR", { day: "numeric", month: "long", year: "numeric" }) : "";
 
@@ -119,7 +121,7 @@ export function DateField({ label, value, onChange, hint }: { label: string; val
         )}
       </div>
       <p className={`mt-1 min-h-[16px] text-[12px] ${partial ? "text-terre" : "text-or-fonce"}`}>
-        {complete ? words : partial ? t("Date incomplète ou impossible : jour, mois, puis année sur 4 chiffres.") : hint ?? ""}
+        {complete ? words : partial ? (future ? t("Date incomplète, impossible ou déjà passée : jour, mois, puis année sur 4 chiffres.") : t("Date incomplète ou impossible : jour, mois, puis année sur 4 chiffres.")) : hint ?? ""}
       </p>
     </div>
   );

@@ -109,7 +109,7 @@ create or replace function nr_put_media(fid text, fkey text, mid text, mime text
 language plpgsql security definer set search_path = public as $$
 begin
   perform nr_check(fid, fkey);
-  if length(b64) > 14000000 then raise exception 'NR_FICHIER_TROP_GROS'; end if;
+  if length(b64) > 45000000 then raise exception 'NR_FICHIER_TROP_GROS'; end if;
   insert into nr_media (family_id, id, mime, data) values (fid, mid, mime, decode(b64, 'base64'))
   on conflict (family_id, id) do nothing;
 end $$;
@@ -189,6 +189,42 @@ begin
   return query select r.family_id, r.fkey, r.user_id from nr_recovery r where r.code_hash = encode(sha256(convert_to(upper(code), 'UTF8')), 'hex');
 end $$;
 
+-- Gardien des coffres du futur : la clé d'un coffre n'est rendue aux bénéficiaires
+-- qu'à partir de sa date d'ouverture, selon l'horloge du serveur.
+create table if not exists nr_coffres (
+  family_id  text not null references nr_families(id) on delete cascade,
+  cid        text not null,
+  open_at    date not null,
+  ckey       text not null,
+  code       text not null,
+  primary key (family_id, cid)
+);
+alter table nr_coffres enable row level security;
+
+create or replace function nr_coffre_put(fid text, fkey text, cid text, open_at date, ckey text, code text) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  perform nr_check(fid, fkey);
+  -- Une fois confiée, la clé ne peut être remplacée que par quelqu'un qui connaît le code.
+  insert into nr_coffres as c (family_id, cid, open_at, ckey, code) values (fid, nr_coffre_put.cid, nr_coffre_put.open_at, nr_coffre_put.ckey, upper(nr_coffre_put.code))
+  on conflict on constraint nr_coffres_pkey do update set open_at = excluded.open_at, ckey = excluded.ckey
+    where c.code = excluded.code;
+end $$;
+
+create or replace function nr_coffre_get(fid text, fkey text, cid text) returns table (ckey text, code text)
+language plpgsql security definer set search_path = public as $$
+begin
+  perform nr_check(fid, fkey);
+  return query select c.ckey, c.code from nr_coffres c where c.family_id = fid and c.cid = nr_coffre_get.cid and c.open_at <= (now() at time zone 'utc')::date;
+end $$;
+
+create or replace function nr_coffre_author(fid text, fkey text, cid text, code text) returns table (ckey text)
+language plpgsql security definer set search_path = public as $$
+begin
+  perform nr_check(fid, fkey);
+  return query select c.ckey from nr_coffres c where c.family_id = fid and c.cid = nr_coffre_author.cid and c.code = upper(nr_coffre_author.code);
+end $$;
+
 -- Tableau de bord du créateur de l'application (protégé par son code créateur).
 create or replace function nr_creator_stats(pin text) returns jsonb
 language plpgsql security definer set search_path = public as $$
@@ -211,6 +247,6 @@ begin
   );
 end $$;
 
-revoke all on nr_families, nr_records, nr_media, nr_devices, nr_days, nr_recovery, nr_public from anon, authenticated;
-grant execute on function nr_create, nr_push, nr_pull, nr_put_media, nr_get_media, nr_has_media, nr_ping, nr_creator_stats, nr_set_recovery, nr_get_recovery, nr_set_public, nr_public_media to anon, authenticated;
+revoke all on nr_families, nr_records, nr_media, nr_devices, nr_days, nr_recovery, nr_public, nr_coffres from anon, authenticated;
+grant execute on function nr_create, nr_push, nr_pull, nr_put_media, nr_get_media, nr_has_media, nr_ping, nr_creator_stats, nr_set_recovery, nr_get_recovery, nr_set_public, nr_public_media, nr_coffre_put, nr_coffre_get, nr_coffre_author to anon, authenticated;
 revoke execute on function nr_check from anon, authenticated, public;

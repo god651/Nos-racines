@@ -300,7 +300,7 @@ export function HomeView({ d }: { d: HomeData }) {
               : [
                   { href: "/arbre", label: t("Arbre"), d: "M12 3a2.5 2.5 0 110 5 2.5 2.5 0 010-5zM12 8v4M12 12L5 16.5M12 12l7 4.5" },
                   { href: "/ancien", label: t("Écouter"), d: "M4 14v-2a8 8 0 0116 0v2M3 14h4v6H3zM17 14h4v6h-4z" },
-                  { href: "/capsule", label: t("Capsule"), d: "M3 8h18v12H3zM3 12h18M7 8V5h10v3" },
+                  { href: "/capsule", label: t("Coffre"), d: "M3 8h18v12H3zM3 12h18M7 8V5h10v3" },
                   { href: "/qr", label: t("QR codes"), d: "M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h3v3M21 14v7h-7" },
                 ]
             ).map((q) => (

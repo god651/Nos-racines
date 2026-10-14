@@ -21,6 +21,8 @@ import Ancien from "@/app/ancien/page";
 import Arbre from "@/app/arbre/page";
 import Bienvenue from "@/app/bienvenue/page";
 import Capsule from "@/app/capsule/page";
+import CoffreNouveau from "@/app/capsule/nouveau/page";
+import CoffreDetailPage from "@/app/capsule/[id]/page";
 import Creer from "@/app/creer/page";
 import FamilleCode from "@/app/famille/[code]/page";
 import Griot from "@/app/griot/page";
@@ -43,6 +45,7 @@ import { logOpen } from "@/lib/activity";
 import { startSync } from "@/lib/local/sync";
 import { startAutosave } from "@/lib/local/autosave";
 import { SaveHost } from "@/components/SaveHost";
+import { CoffreHost } from "@/components/coffre/CoffreHost";
 
 // Les écrans de l'application. Ceux qui lisent les données sont des fonctions
 // qui préparent les informations puis renvoient l'écran à afficher.
@@ -53,6 +56,8 @@ const ROUTES: [string, PageFn][] = [
   ["/arbre", Arbre as unknown as PageFn],
   ["/bienvenue", Bienvenue as unknown as PageFn],
   ["/capsule", Capsule as unknown as PageFn],
+  ["/capsule/nouveau", CoffreNouveau as unknown as PageFn],
+  ["/capsule/:id", CoffreDetailPage as unknown as PageFn],
   ["/creer", Creer as unknown as PageFn],
   ["/famille/:code", FamilleCode as unknown as PageFn],
   ["/griot", Griot as unknown as PageFn],
@@ -138,6 +143,7 @@ export function App() {
       </div>
       {!persistent && !isNative && <DemoNotice />}
       <UpdateHost blocked={intro || showGuide || !!legacy} />
+      <CoffreHost me={viewer.user} blocked={intro || showGuide || !!legacy || route.path === "/"} />
       <SaveHost blocked={intro || showGuide || !!legacy || route.path === "/" || !viewer.user} />
       <ConfirmHost />
       <CropHost />

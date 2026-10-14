@@ -89,16 +89,50 @@ export interface Memory {
   by: string;
 }
 
+/** Un objet déposé dans un coffre du futur. Les fichiers sont chiffrés ; la lettre aussi (dans `box`). */
+export interface CapsuleItem {
+  id: string;
+  kind: "lettre" | "document" | "photo" | "voix" | "video";
+  /** Texte de la lettre (seulement une fois le coffre déchiffré). */
+  text?: string;
+  /** Fichier chiffré, dans les médias de la famille. */
+  mediaId?: string;
+  name?: string;
+  mime?: string;
+  durationSec?: number;
+  addedAt: number;
+}
+
+/** À qui le coffre est destiné : toute la famille, une personne de l'arbre, ou un compte. */
+export interface CapsuleRecipient {
+  kind: "all" | "person" | "user";
+  id?: string;
+  label: string;
+}
+
+/** Coffre du futur : scellé jusqu'à sa date, ouvert avec la clé de son auteur. */
 export interface Capsule {
   id: string;
   by: string;
   byName: string;
-  recipients: string;
-  openYear: number;
-  kind: "letter" | "audio" | "video";
+  title?: string;
+  /** Date d'ouverture AAAA-MM-JJ. */
+  openAt?: string;
+  to?: CapsuleRecipient[];
+  /** Empreinte du code de la clé (jamais le code lui-même). */
+  codeHash?: string;
+  salt?: string;
+  /** Contenu chiffré (AES-GCM) : la liste des objets, lettres comprises. */
+  box?: { iv: string; data: string };
+  itemCount?: number;
+  updatedAt?: number;
+  createdAt: number;
+  // ─── Ancien format (capsules d'avant le coffre) ───
+  recipients?: string;
+  openYear?: number;
+  kind?: "letter" | "audio" | "video";
   text?: string;
   mediaId?: string;
-  createdAt: number;
 }
 
 /** Hommage au mémorial d'un défunt : une bougie ou un mot. */
@@ -125,7 +159,7 @@ export interface QuizScore {
 
 export interface Media {
   id: string;
-  kind: "photo" | "audio";
+  kind: "photo" | "audio" | "coffre";
   mime: string;
   file: string;
   size: number;

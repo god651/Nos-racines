@@ -33,8 +33,7 @@ export async function POST(req: NextRequest) {
   const ext = EXT[mime];
   if (!ext) return fail("Format non pris en charge.");
   const kind = mime.startsWith("audio/") ? "audio" : "photo";
-  // Seuls les administrateurs alimentent la famille ; un membre peut seulement joindre un média à sa capsule.
-  if (!v.isAdmin && form.get("purpose") !== "capsule") return fail("Seul un administrateur peut ajouter des médias.", 403);
+  // Un membre peut envoyer une photo (sa propre fiche, complétée une fois) ; ce qui l'utilise reste contrôlé ailleurs.
 
   const id = newId(16);
   const name = `${id}.${ext}`;

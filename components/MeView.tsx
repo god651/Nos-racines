@@ -9,11 +9,13 @@ import { joinCode } from "@/lib/share-code";
 import { useState } from "react";
 import { api, mediaUrl } from "@/lib/client";
 import { LANGS } from "@/lib/i18n/core";
-import { useT } from "@/lib/i18n/client";
+import { useLang, useT } from "@/lib/i18n/client";
 import { askConfirm } from "@/components/Confirm";
 import type { Lang } from "@/lib/types";
 import { Grain } from "./ambiance";
 import { CodeEntry } from "./forms/CodeEntry";
+import { CoffreKey, formatDate } from "./coffre/parts";
+import { localCode } from "@/lib/local/coffre";
 import { markGuide } from "./Guide";
 import { otherAccounts, switchAccount } from "@/lib/local/accounts";
 import { BottomNav } from "./BottomNav";
@@ -34,6 +36,7 @@ export interface MeData {
   isLastAdmin: boolean;
   isOwner: boolean;
   isCreator: boolean;
+  keys: { id: string; title?: string; openDate: string; due: boolean; mine: boolean; byName: string }[];
 }
 
 export function MeView({ d }: { d: MeData }) {
@@ -69,7 +72,7 @@ export function MeView({ d }: { d: MeData }) {
   const stats = [
     { n: c.stories, label: t("récits") },
     { n: c.memories, label: t("souvenirs") },
-    { n: c.capsulesSealed + c.capsulesOpen, label: t("capsules") },
+    { n: c.capsulesSealed + c.capsulesOpen, label: t("coffres") },
   ];
 
   return (
@@ -163,10 +166,12 @@ export function MeView({ d }: { d: MeData }) {
           </motion.div>
         )}
 
+        {d.keys.length > 0 && <MyKeys keys={d.keys} />}
+
         {/* Raccourcis */}
         <div className="grid grid-cols-2 gap-3">
           {[
-            { href: "/capsule", title: t("Mes capsules"), sub: c.capsulesSealed ? t("{n} scellée(s)", { n: c.capsulesSealed }) : t("Écrire au futur") },
+            { href: "/capsule", title: t("Mes coffres"), sub: c.capsulesSealed ? t("{n} scellée(s)", { n: c.capsulesSealed }) : t("Écrire au futur") },
             { href: "/qr", title: t("QR codes"), sub: d.isAdmin ? t("Arbre, invitations, fiches") : t("Arbre et fiches") },
             { href: "/carte", title: t("Notre terre"), sub: t("La famille sur la carte") },
             { href: "/parametres", title: t("Paramètres"), sub: t("Famille, langue, son…") },
@@ -286,5 +291,30 @@ function OtherAccounts() {
       )}
       <CodeEntry />
     </Card>
+  );
+}
+
+/** Mes clés : bien visibles dans le profil, avec le code gravé dessus. */
+function MyKeys({ keys }: { keys: MeData["keys"] }) {
+  const t = useT();
+  const lang = useLang();
+  return (
+    <section className="rounded-[22px] border border-or/40 bg-[linear-gradient(140deg,#1F3D2B,#12261A)] p-4 text-coton shadow-doux">
+      <h2 className="font-serif text-[19px]">{t("Mes clés")}</h2>
+      <p className="text-[12px] text-or-pale">{t("Chaque clé ouvre un coffre du futur. Le code est gravé dessus.")}</p>
+      <div className="nr-no-scrollbar -mx-1 mt-3 flex gap-3 overflow-x-auto px-1 pb-1">
+        {keys.map((k) => (
+          <Link key={k.id} href={`/capsule/${k.id}`} className="w-[190px] shrink-0 rounded-[18px] border border-or/25 bg-coton/5 p-3">
+            <div className="flex justify-center">
+              <CoffreKey code={localCode(k.id) ?? undefined} size={44} glow={k.due} />
+            </div>
+            <p className="mt-2 truncate font-serif text-[15px]">{k.title || t("Coffre du futur")}</p>
+            <p className="text-[11px] text-or-pale">
+              {k.mine ? (k.due ? t("ouvert le {date}", { date: formatDate(k.openDate, lang) }) : t("s’ouvre le {date}", { date: formatDate(k.openDate, lang) })) : t("reçue de {nom}", { nom: k.byName })}
+            </p>
+          </Link>
+        ))}
+      </div>
+    </section>
   );
 }
