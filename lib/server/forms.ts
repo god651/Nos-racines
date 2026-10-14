@@ -13,7 +13,7 @@ export function relationsOf(s: Store, id: string) {
     parentKind: (pa?.kind ?? "biological") as ParentageKind,
     spouses: s.unions
       .filter((u) => u.partnerA === id || u.partnerB === id)
-      .map((u) => ({ id: u.partnerA === id ? u.partnerB : u.partnerA, kind: u.kind as UnionKind, rank: u.rank })),
+      .map((u) => ({ id: u.partnerA === id ? u.partnerB : u.partnerA, kind: u.kind as UnionKind, rank: u.rank, separated: u.separated, separatedYear: u.separatedYear })),
     children: [] as string[],
   };
 }

@@ -234,6 +234,7 @@ export function syncNow(): Promise<void> {
       if (Number(kv.get("nr_nuage_seq") ?? 0) === 0) await pull(link);
       await push(link);
       await pull(link);
+      await publishPortraits(link).catch(() => undefined);
       setStatus({ busy: false, last: Date.now(), error: undefined });
       void fetchMedia(link);
       void ping(link);
@@ -359,4 +360,27 @@ export async function recoverWithCode(raw: string): Promise<string> {
   await joinCloud({ fid: rows[0].fid, key: rows[0].fkey });
   kv.set(`nr_reprise_${rows[0].uid}`, code);
   return rows[0].uid;
+}
+
+// ─── Portraits visibles par tous (QR codes des fiches et de l'arbre) ───
+async function publishPortraits(link: CloudLink) {
+  const mids = [...new Set(read().persons.filter((p) => !p.placeholder).flatMap((p) => p.photoIds ?? (p.photoId ? [p.photoId] : [])))].sort();
+  const sig = mids.join(",");
+  if (kv.get("nr_portraits_publics") === sig) return;
+  await rpc("nr_set_public", { fid: link.fid, fkey: link.key, mids });
+  kv.set("nr_portraits_publics", sig);
+}
+
+/** Identifiant de la famille en ligne (pour que les QR codes montrent les portraits). */
+export const publicFamilyId = () => (cloudAvailable ? getLink()?.fid : undefined);
+
+/** Portrait d'un QR code : lisible par n'importe qui, sans la clé de la famille. */
+export async function fetchPublicPhoto(fid: string, mid: string): Promise<Blob | null> {
+  if (!cloudAvailable) return null;
+  try {
+    const rows = await rpc<{ mime: string; b64: string }[]>("nr_public_media", { fid, mid });
+    return rows?.[0] ? fromB64(rows[0].b64, rows[0].mime) : null;
+  } catch {
+    return null;
+  }
 }

@@ -6,7 +6,7 @@ import { fullName } from "@/lib/types";
 // Espace du fondateur (lui seul) : la vie de la famille dans l'application, jour après jour.
 export default async function FondateurPage() {
   const { s, family, viewer } = await requireMember();
-  if (!viewer.isOwner) redirect("/accueil");
+  if (!viewer.isCreator) redirect("/accueil");
   const userName = (id: string) => s.users.find((u) => u.id === id)?.name ?? "—";
   const personName = (id: string) => {
     const p = s.persons.find((x) => x.id === id);
@@ -39,7 +39,8 @@ export default async function FondateurPage() {
         photos: s.media.filter((m) => m.kind === "photo").length,
       }}
       accounts={s.users
-        .map((u) => ({ id: u.id, name: u.name, admin: u.role === "admin", owner: u.id === family.ownerId, since: u.createdAt, lastSeen: lastSeen.get(u.id) }))
+        .map((u) => ({ id: u.id, name: u.name, admin: u.role === "admin", owner: u.id === family.ownerId,
+          creator: !!u.creator, since: u.createdAt, lastSeen: lastSeen.get(u.id) }))
         .sort((a, b) => Number(b.owner) - Number(a.owner) || a.since - b.since)}
       feed={feed}
     />

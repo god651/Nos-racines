@@ -36,12 +36,14 @@ export default async function ParametresPage() {
               role: owner === u.id ? ("admin" as const) : u.role,
               personName: p ? fullName(p) : undefined,
               isOwner: owner === u.id,
+              isCreator: !!u.creator,
               code: viewer.isAdmin ? code : undefined,
               connected: s.sessions.some((x) => x.userId === u.id),
             };
           })
           .sort((a, b) => Number(b.isOwner) - Number(a.isOwner) || (a.role === b.role ? a.name.localeCompare(b.name) : a.role === "admin" ? -1 : 1)),
         isOwner: viewer.isOwner,
+        isCreator: viewer.isCreator,
         persons: s.persons.filter((p) => !p.placeholder).map((p) => ({ id: p.id, name: fullName(p) })),
         maxAdmins: MAX_ADMINS,
         settings: {

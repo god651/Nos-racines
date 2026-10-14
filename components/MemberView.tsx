@@ -52,7 +52,7 @@ export interface MemberData {
   memories: { id: string; caption: string; year?: number; photoId?: string }[];
   parents: RelLink[];
   parentKind?: ParentageKind;
-  spouses: (RelLink & { rank?: number; kind: UnionKind })[];
+  spouses: (RelLink & { rank?: number; kind: UnionKind; separated?: boolean; separatedYear?: number })[];
   children: RelLink[];
   siblings: RelLink[];
   isMe: boolean;
@@ -352,7 +352,7 @@ export function MemberView({ d }: { d: MemberData }) {
                 <RelRow title={d.parentKind && KIND[d.parentKind] ? `${t("Parents")} · ${KIND[d.parentKind]}` : t("Parents")} people={d.parents} />
                 <RelRow
                   title={d.spouses.length > 1 ? t("Conjoints") : t("Conjoint")}
-                  people={d.spouses.map((s) => ({ ...s, years: s.rank && d.spouses.length > 1 ? t("{n}e union", { n: s.rank }) : s.years }))}
+                  people={d.spouses.map((s) => ({ ...s, years: s.separated ? (s.separatedYear ? t("séparés en {a}", { a: s.separatedYear }) : t("séparés")) : s.rank && d.spouses.length > 1 ? t("{n}e union", { n: s.rank }) : s.years }))}
                 />
                 <RelRow title={t("Enfants")} people={d.children} />
                 <RelRow title={t("Frères et sœurs")} people={d.siblings} />

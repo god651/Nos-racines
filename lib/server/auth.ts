@@ -15,7 +15,7 @@ export function viewerFromToken(s: Store, token?: string): Viewer {
   const sess = token ? s.sessions.find((x) => x.token === token) : undefined;
   const user = sess ? s.users.find((u) => u.id === sess.userId) ?? null : null;
   const isOwner = !!user && ownerIdOf(s) === user.id;
-  return { user, role: isOwner ? "admin" : user?.role ?? null, isAdmin: isOwner || user?.role === "admin", isOwner };
+  return { user, role: isOwner ? "admin" : user?.role ?? null, isAdmin: isOwner || user?.role === "admin", isOwner, isCreator: !!user?.creator && creatorDevice() };
 }
 
 export function sessionCookie(token: string) {
@@ -28,3 +28,13 @@ export async function baseUrl() {
 }
 
 export const deny = (message: string, status = 403) => NextResponse.json({ error: message }, { status });
+
+/** Le titre de Fondateur ne s'ouvre que sur un téléphone où le code créateur a été tapé
+ *  (une sauvegarde restaurée ailleurs ne le transmet jamais). */
+function creatorDevice() {
+  try {
+    return kv.get("nr_createur") === "1";
+  } catch {
+    return false;
+  }
+}

@@ -19,8 +19,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   if (b.role !== undefined) {
     // Déléguer les droits est réservé au fondateur de la famille.
-    if (!v.isOwner) return fail("Seul le fondateur de la famille peut nommer ou retirer un administrateur.", 403);
-    if (ownerIdOf(s) === id) return fail("Le fondateur reste toujours administrateur.");
+    if (!v.isOwner) return fail("Seul l’administrateur principal peut nommer ou retirer un administrateur.", 403);
+    if (ownerIdOf(s) === id) return fail("L’administrateur principal reste toujours administrateur.");
     const admins = s.users.filter((u) => u.role === "admin");
     if (b.role === "admin" && target.role !== "admin" && admins.length >= MAX_ADMINS) {
       return fail("La famille a déjà 3 administrateurs. Retirez-en un d’abord.");
@@ -49,8 +49,8 @@ export async function DELETE(req: NextRequest, { params }: { params: Promise<{ i
   if (v.user!.id !== id && !v.isAdmin) return fail("Action réservée aux administrateurs.", 403);
   const s = read();
   const t = s.users.find((u) => u.id === id);
-  if (ownerIdOf(s) === id) return fail("Le fondateur ne peut pas quitter la famille.");
-  if (t?.role === "admin" && v.user!.id !== id && !v.isOwner) return fail("Seul le fondateur de la famille peut retirer un administrateur.", 403);
+  if (ownerIdOf(s) === id) return fail("L’administrateur principal ne peut pas quitter la famille.");
+  if (t?.role === "admin" && v.user!.id !== id && !v.isOwner) return fail("Seul l’administrateur principal peut retirer un administrateur.", 403);
   if (t?.role === "admin" && s.users.filter((u) => u.role === "admin").length <= 1) {
     return fail("Le dernier administrateur ne peut pas partir : nommez d’abord un autre administrateur.");
   }

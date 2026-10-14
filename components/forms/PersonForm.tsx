@@ -1,5 +1,6 @@
 "use client";
 
+import { DateField } from "./DateField";
 import { PLACE_SUGGESTIONS } from "@/lib/geo";
 import { AnimatePresence, motion } from "framer-motion";
 import { useRouter } from "next/navigation";
@@ -36,7 +37,7 @@ export interface PersonOption {
 interface Props {
   person?: Person;
   options: PersonOption[]; // les autres personnes de l'arbre
-  initial: { parents: string[]; parentKind: ParentageKind; spouses: { id: string; kind: UnionKind; rank?: number }[]; children: string[] };
+  initial: { parents: string[]; parentKind: ParentageKind; spouses: { id: string; kind: UnionKind; rank?: number; separated?: boolean; separatedYear?: number }[]; children: string[] };
   backHref: string;
   /** Nom de famille proposé pour une nouvelle fiche. */
   defaultFamilyName?: string;
@@ -93,7 +94,7 @@ export function PersonForm({ person, options, initial, backHref, defaultFamilyNa
   });
   const [photos, setPhotos] = useState<string[]>(p?.photoIds ?? (p?.photoId ? [p.photoId] : []));
   // Lien de parenté (nouvelle personne) : « [lien] de [personne] ».
-  const [kin, setKin] = useState<{ anchorId: string; relation: Relation | ""; side: "m" | "f"; viaId: string }>({
+  const [kin, setKin] = useState<{ anchorId: string; relation: Relation | ""; side: "m" | "f"; viaId: string; otherId?: string }>({
     anchorId: anchor?.id ?? "",
     relation: anchor?.relation ?? "",
     side: "m",
@@ -129,7 +130,7 @@ export function PersonForm({ person, options, initial, backHref, defaultFamilyNa
       isLiving: f.isLiving && !f.deathYear && !f.deathDate,
       photoIds: photos,
       ...(byKin
-        ? { relation: kin.relation, anchorId: kin.anchorId, side: kin.side, viaId: kin.viaId || undefined }
+        ? { relation: kin.relation, anchorId: kin.anchorId, side: kin.side, viaId: kin.viaId || undefined, otherParentId: kin.otherId || undefined }
         : { parents: parents.filter(Boolean), parentKind, spouses: spouses.filter((s) => s.id), children }),
       timeline: timeline.filter((x) => x.text.trim()),
       favoriteDishes: dishes,
@@ -185,10 +186,10 @@ export function PersonForm({ person, options, initial, backHref, defaultFamilyNa
             <Field label={t("Année de décès")} inputMode="numeric" value={f.deathYear} onChange={set("deathYear")} placeholder={t("si décédé(e)")} />
           </div>
           <Toggle label={t("En vie")} checked={f.isLiving && !f.deathYear && !f.deathDate} onChange={(v) => setF({ ...f, isLiving: v, deathYear: v ? "" : f.deathYear, deathDate: v ? "" : f.deathDate })} />
-          <div className="grid grid-cols-2 gap-3">
-            <Field label={t("Date de naissance")} type="date" value={f.birthDate} onChange={(e) => setF({ ...f, birthDate: e.target.value, birthYear: e.target.value ? e.target.value.slice(0, 4) : f.birthYear })} />
+          <div className="space-y-2">
+            <DateField label={t("Date de naissance")} value={f.birthDate} onChange={(v) => setF((x) => ({ ...x, birthDate: v, birthYear: v ? v.slice(0, 4) : x.birthYear }))} />
             {!(f.isLiving && !f.deathYear) && (
-              <Field label={t("Date du décès")} type="date" value={f.deathDate} onChange={(e) => setF({ ...f, deathDate: e.target.value, deathYear: e.target.value ? e.target.value.slice(0, 4) : f.deathYear })} />
+              <DateField label={t("Date du décès")} value={f.deathDate} onChange={(v) => setF((x) => ({ ...x, deathDate: v, deathYear: v ? v.slice(0, 4) : x.deathYear }))} />
             )}
           </div>
           <p className="-mt-2 text-xs text-[#6B6455]">{t("Facultatif : la date exacte permet de marquer les anniversaires.")}</p>
@@ -207,14 +208,26 @@ export function PersonForm({ person, options, initial, backHref, defaultFamilyNa
             <p className="text-sm text-[#6B6455]">{t("C’est la première personne de l’arbre. Les liens pourront être ajoutés avec les personnes suivantes.")}</p>
           ) : (
             <>
-              {[0, 1].map((i) => (
-                <Select key={i} label={i === 0 ? t("Parent 1") : t("Parent 2")} value={parents[i] ?? ""} onChange={(e) => { const n = [parents[0] ?? "", parents[1] ?? ""]; n[i] = e.target.value; setParents(n); }}>
-                  <option value="">{t("— Aucun —")}</option>
-                  {others.filter((o) => !parents.includes(o.id) || parents[i] === o.id).map((o) => (
-                    <option key={o.id} value={o.id}>{label(o)}</option>
-                  ))}
-                </Select>
-              ))}
+              {/* Le père et la mère se choisissent séparément : des frères et sœurs peuvent avoir la même mère et pas le même père. */}
+              {(["m", "f"] as const).map((sx) => {
+                const cur = parents.find((id) => others.find((o) => o.id === id)?.sex === sx) ?? "";
+                return (
+                  <Select
+                    key={sx}
+                    label={sx === "m" ? t("Père") : t("Mère")}
+                    value={cur}
+                    onChange={(e) => {
+                      const keep = parents.filter((id) => id && others.find((o) => o.id === id)?.sex !== sx);
+                      setParents(e.target.value ? [...keep, e.target.value].sort((a, b) => (others.find((o) => o.id === a)?.sex === "m" ? -1 : 1) - (others.find((o) => o.id === b)?.sex === "m" ? -1 : 1)) : keep);
+                    }}
+                  >
+                    <option value="">{t("— Inconnu(e) —")}</option>
+                    {others.filter((o) => o.sex === sx).map((o) => (
+                      <option key={o.id} value={o.id}>{label(o)}</option>
+                    ))}
+                  </Select>
+                );
+              })}
               {parents.some(Boolean) && (
                 <Select label={t("Type de filiation")} value={parentKind} onChange={(e) => setParentKind(e.target.value as ParentageKind)}>
                   <option value="biological">{t("Biologique")}</option>
@@ -249,6 +262,30 @@ export function PersonForm({ person, options, initial, backHref, defaultFamilyNa
                           <option key={r} value={r}>{r === 1 ? t("1re") : t("{n}e", { n: r })}</option>
                         ))}
                       </Select>
+                      <div className="col-span-2 flex items-center gap-3">
+                        <label className="flex flex-1 items-center gap-2 text-[13px] text-foret">
+                          <input
+                            type="checkbox"
+                            checked={!!sp.separated}
+                            onChange={(e) => setSpouses(spouses.map((x, j) => (j === i ? { ...x, separated: e.target.checked, separatedYear: e.target.checked ? x.separatedYear : undefined } : x)))}
+                            className="h-5 w-5 accent-[#1F3D2B]"
+                          />
+                          {t("Séparés")}
+                        </label>
+                        {sp.separated && (
+                          <input
+                            inputMode="numeric"
+                            placeholder={t("Année")}
+                            aria-label={t("Année de la séparation")}
+                            value={sp.separatedYear?.toString() ?? ""}
+                            onChange={(e) => {
+                              const v = e.target.value.replace(/\D/g, "").slice(0, 4);
+                              setSpouses(spouses.map((x, j) => (j === i ? { ...x, separatedYear: v ? Number(v) : undefined } : x)));
+                            }}
+                            className="min-h-11 w-[6.5rem] rounded-[14px] border border-or-pale bg-white px-3 text-center text-[16px] text-nuit outline-none focus:border-or"
+                          />
+                        )}
+                      </div>
                     </motion.div>
                   ))}
                 </AnimatePresence>
@@ -341,7 +378,7 @@ export const REL_LABEL: Record<Relation, string> = {
   grandpere: tx("Grand-père"), grandmere: tx("Grand-mère"), oncle: tx("Oncle"), tante: tx("Tante"), cousin: tx("Cousin"), cousine: tx("Cousine"), neveu: tx("Neveu"), niece: tx("Nièce"), petitfils: tx("Petit-fils"), petitefille: tx("Petite-fille"),
 };
 
-type Kin = { anchorId: string; relation: Relation | ""; side: "m" | "f"; viaId: string };
+type Kin = { anchorId: string; relation: Relation | ""; side: "m" | "f"; viaId: string; otherId?: string };
 
 function KinSection({ kin, setKin, options, choices }: { kin: Kin; setKin: (k: Kin) => void; options: PersonOption[]; choices: Record<string, KinChoices> }) {
   const t = useT();
@@ -357,6 +394,23 @@ function KinSection({ kin, setKin, options, choices }: { kin: Kin; setKin: (k: K
         : kin.relation === "petitfils" || kin.relation === "petitefille"
           ? { label: t("Enfant de quel enfant ?"), list: c?.children ?? [] }
           : null;
+  // L'autre parent : pour un enfant (son père ou sa mère), ou pour un demi-frère / une demi-sœur
+  // (le parent qu'ils ne partagent pas).
+  const anchorSex = options.find((o) => o.id === kin.anchorId)?.sex;
+  const otherParent =
+    kin.relation === "fils" || kin.relation === "fille"
+      ? {
+          label: anchorSex === "f" ? t("Son père") : t("Sa mère"),
+          auto: t("Automatique (le conjoint, s’il n’y en a qu’un)"),
+          list: options.filter((o) => o.id !== kin.anchorId && o.sex !== anchorSex),
+        }
+      : kin.relation === "demifrere" || kin.relation === "demisoeur"
+        ? {
+            label: kin.side === "m" ? t("Sa mère (différente)") : t("Son père (différent)"),
+            auto: t("— Choisir —"),
+            list: options.filter((o) => o.id !== kin.anchorId && o.sex === (kin.side === "m" ? "f" : "m")),
+          }
+        : null;
   return (
     <section className="rounded-[20px] border border-or bg-white/80 p-4 shadow-doux">
       <h2 className="font-serif text-lg text-nuit">{t("Lien de parenté")}</h2>
@@ -377,7 +431,7 @@ function KinSection({ kin, setKin, options, choices }: { kin: Kin; setKin: (k: K
                   <button
                     key={r}
                     type="button"
-                    onClick={() => setKin({ ...kin, relation: kin.relation === r ? "" : r, viaId: "" })}
+                    onClick={() => setKin({ ...kin, relation: kin.relation === r ? "" : r, viaId: "", otherId: "" })}
                     aria-pressed={kin.relation === r}
                     className={`rounded-full border px-3 py-1.5 text-[13px] transition-colors ${kin.relation === r ? "border-foret bg-foret text-coton" : "border-or-pale bg-coton text-foret"}`}
                   >
@@ -395,11 +449,20 @@ function KinSection({ kin, setKin, options, choices }: { kin: Kin; setKin: (k: K
           {needsSide && (
             <div className="flex gap-2" role="group" aria-label={t("Côté")}>
               {(["m", "f"] as const).map((v) => (
-                <button key={v} type="button" onClick={() => setKin({ ...kin, side: v, viaId: "" })} aria-pressed={kin.side === v} className={`min-h-11 flex-1 rounded-full border text-[13px] ${kin.side === v ? "border-foret bg-foret text-coton" : "border-or-pale text-foret"}`}>
+                <button key={v} type="button" onClick={() => setKin({ ...kin, side: v, viaId: "", otherId: "" })} aria-pressed={kin.side === v} className={`min-h-11 flex-1 rounded-full border text-[13px] ${kin.side === v ? "border-foret bg-foret text-coton" : "border-or-pale text-foret"}`}>
                   {v === "m" ? t("Côté du père") : t("Côté de la mère")}
                 </button>
               ))}
             </div>
+          )}
+          {otherParent && (
+            <Select label={otherParent.label} value={kin.otherId ?? ""} onChange={(e) => setKin({ ...kin, otherId: e.target.value })}>
+              <option value="">{otherParent.auto}</option>
+              {otherParent.list.map((o) => (
+                <option key={o.id} value={o.id}>{o.name}</option>
+              ))}
+              <option value="none">{t("Inconnu(e) / pas dans l’arbre")}</option>
+            </Select>
           )}
           {via && via.list.length > 1 && (
             <Select label={via.label} value={kin.viaId} onChange={(e) => setKin({ ...kin, viaId: e.target.value })}>

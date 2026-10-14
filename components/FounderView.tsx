@@ -35,6 +35,7 @@ interface Account {
   name: string;
   admin: boolean;
   owner: boolean;
+  creator: boolean;
   since: number;
   lastSeen?: number;
 }
@@ -147,7 +148,7 @@ export function FounderView({ familyName, since, totals, accounts, feed }: { fam
               <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-or/40 font-serif text-or">{a.name.slice(0, 1).toUpperCase()}</span>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-[14px]">{a.name}</span>
-                <span className="block text-[11px] text-or-pale">{a.owner ? t("Fondateur") : a.admin ? t("Administrateur") : t("Membre")} · {t("depuis le {d}", { d: new Date(a.since).toLocaleDateString() })}</span>
+                <span className="block text-[11px] text-or-pale">{a.creator ? t("Fondateur") : a.owner ? t("Administrateur principal") : a.admin ? t("Administrateur") : t("Membre")} · {t("depuis le {d}", { d: new Date(a.since).toLocaleDateString() })}</span>
               </span>
               <span className="shrink-0 text-right text-[11px] text-coton/50">{a.lastSeen ? ago(a.lastSeen, t) : t("pas encore connecté ici")}</span>
             </div>

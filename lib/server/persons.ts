@@ -89,7 +89,7 @@ export function applyRelations(s: Store, id: string, b: Record<string, unknown>)
   }
 
   if (Array.isArray(b.spouses)) {
-    const list = (b.spouses as { id?: unknown; kind?: unknown; rank?: unknown }[]).filter((x) => exists(x.id)).slice(0, 8);
+    const list = (b.spouses as { id?: unknown; kind?: unknown; rank?: unknown; separated?: unknown; separatedYear?: unknown }[]).filter((x) => exists(x.id)).slice(0, 8);
     s.unions = s.unions.filter((u) => u.partnerA !== id && u.partnerB !== id);
     for (const sp of list) {
       s.unions.push({
@@ -98,6 +98,7 @@ export function applyRelations(s: Store, id: string, b: Record<string, unknown>)
         partnerB: id,
         kind: UKINDS.includes(sp.kind as UnionKind) ? (sp.kind as UnionKind) : "customary",
         rank: int(sp.rank, 1, 12),
+        ...(sp.separated === true ? { separated: true, separatedYear: int(sp.separatedYear, 1800, 2100) } : {}),
       });
     }
   }

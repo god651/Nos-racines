@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { match } from "./router";
 import * as capsules from "@/app/api/capsules/route";
 import * as comptes from "@/app/api/comptes/route";
+import * as createur from "@/app/api/createur/route";
 import * as exporter from "@/app/api/export/route";
 import * as famille from "@/app/api/famille/route";
 import * as exemple from "@/app/api/famille/exemple/route";
@@ -31,6 +32,7 @@ type Handler = (req: NextRequest, ctx: { params: Promise<Record<string, string>>
 const ROUTES: [string, Record<string, unknown>][] = [
   ["/api/capsules", capsules],
   ["/api/comptes", comptes],
+  ["/api/createur", createur],
   ["/api/export", exporter],
   ["/api/famille", famille],
   ["/api/famille/exemple", exemple],

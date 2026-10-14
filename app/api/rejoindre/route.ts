@@ -14,7 +14,7 @@ export async function POST(req: NextRequest) {
   const token = newId(32);
 
   if (inv.kind === "account") {
-    if (inv.uses > 0) return fail("Ce code a déjà été utilisé. Demandez-en un nouveau au fondateur de la famille.", 410);
+    if (inv.uses > 0) return fail("Ce code a déjà été utilisé. Demandez-en un nouveau à l’administrateur principal de la famille.", 410);
     await mutate((st) => {
       st.invites.find((i) => i.token === inv.token)!.uses++;
       st.sessions.push({ token, userId: inv.forUserId!, createdAt: Date.now() });

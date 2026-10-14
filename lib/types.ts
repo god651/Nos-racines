@@ -54,6 +54,9 @@ export interface Union {
   partnerB: string;
   kind: UnionKind;
   rank?: number; // 1re, 2e épouse…
+  /** Couple séparé (divorce, séparation) et l'année. Le lien dans l'arbre devient une vague. */
+  separated?: boolean;
+  separatedYear?: number;
 }
 
 export interface Parentage {
@@ -152,6 +155,8 @@ export interface User {
   name: string;
   role: Role;
   personId?: string; // « c'est moi dans l'arbre »
+  /** Le créateur de l'application NOS RACINES (lui seul porte le titre de « Fondateur »). */
+  creator?: boolean;
   createdAt: number;
 }
 
@@ -205,6 +210,8 @@ export interface Viewer {
   role: Role | null;
   isAdmin: boolean;
   isOwner: boolean;
+  /** Le créateur de l'application : titre « Fondateur » et espace du fondateur. */
+  isCreator: boolean;
 }
 
 /** Le fondateur de la famille (à défaut, le premier administrateur). */

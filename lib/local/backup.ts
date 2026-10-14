@@ -145,7 +145,7 @@ export async function joinFromCloud(link: { fid: string; key: string }, token: s
       kv.set("nr_session", t);
     }
   });
-  if (!userId) throw new Error("Ce QR code n’est plus valable. Demandez-en un nouveau au fondateur de la famille.");
+  if (!userId) throw new Error("Ce QR code n’est plus valable. Demandez-en un nouveau à l’administrateur principal de la famille.");
 }
 
 /** Nouveau téléphone ou réinstallation : avec son code de reprise, on retrouve la famille et son compte. */

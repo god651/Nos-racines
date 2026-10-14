@@ -1,3 +1,6 @@
 Nouveautés :
-• Rejoindre la famille depuis un autre téléphone : un message clair, et la sauvegarde reçue s'ouvre directement avec votre compte.
-• Scanner de QR codes, QR codes lisibles par n'importe quel téléphone, arbre mieux rangé, carte « Notre terre », espace du fondateur, sauvegarde automatique.
+• Couples séparés : case « Séparés » et année ; dans l'arbre, le lien devient une vague.
+• Choisir le père et la mère de chacun (demi-frères et demi-sœurs).
+• Dates tapées au clavier (jour, mois, année), sans calendrier à faire défiler.
+• Le titre « Fondateur » et l'espace du fondateur sont réservés au créateur de l'application.
+• QR code « Rejoindre » scanné sur un autre téléphone : marche à suivre claire au lieu d'une erreur.

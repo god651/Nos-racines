@@ -249,6 +249,11 @@ export async function putMedia(id: string, blob: Blob) {
   await idb("media", "readwrite", (s) => s.put(blob, id));
 }
 export const mediaBlob = (id: string) => blobs.get(id);
+/** Image affichée sans être gardée (portraits d'un QR code ouvert sur la page publique). */
+export function showMedia(id: string, blob: Blob) {
+  if (!urls.has(id)) urls.set(id, URL.createObjectURL(blob));
+  refreshPages();
+}
 export const mediaObjectUrl = (id?: string) => (id ? urls.get(id) : undefined);
 export async function clearMedia() {
   urls.forEach((u) => URL.revokeObjectURL(u));

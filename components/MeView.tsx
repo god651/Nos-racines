@@ -33,6 +33,7 @@ export interface MeData {
   contributions: { stories: number; memories: number; capsulesSealed: number; capsulesOpen: number };
   isLastAdmin: boolean;
   isOwner: boolean;
+  isCreator: boolean;
 }
 
 export function MeView({ d }: { d: MeData }) {
@@ -101,7 +102,7 @@ export function MeView({ d }: { d: MeData }) {
               </button>
             )}
             <div className="mt-1.5 flex flex-wrap items-center gap-2">
-              {d.isOwner ? <span className="rounded-full bg-or px-2.5 py-1 text-[11px] font-semibold text-nuit">{t("Fondateur")}</span> : <RoleBadge admin={d.isAdmin} />}
+              {d.isCreator ? <span className="rounded-full bg-or px-2.5 py-1 text-[11px] font-semibold text-nuit">{t("Fondateur")}</span> : d.isOwner ? <span className="rounded-full border border-or px-2.5 py-1 text-[11px] font-semibold text-or">{t("Administrateur principal")}</span> : <RoleBadge admin={d.isAdmin} />}
               <span className="text-[11px] text-or-pale/80">{d.familyName}</span>
             </div>
           </div>
@@ -148,7 +149,7 @@ export function MeView({ d }: { d: MeData }) {
           )}
         </Card>
 
-        {d.isOwner && (
+        {d.isCreator && (
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
             <Link href="/fondateur" className="flex items-center gap-4 rounded-[22px] border border-or/50 bg-[linear-gradient(120deg,#1F3D2B,#12261A)] p-4 text-coton shadow-doux">
               <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full border border-or/60">
@@ -234,7 +235,7 @@ export function MeView({ d }: { d: MeData }) {
         <div className="pb-2 pt-2 text-center">
           <p className="text-[11px] text-[#9A917F]">{t("Membre depuis le {date}", { date: new Date(d.since).toLocaleDateString() })}</p>
           {d.isLastAdmin ? (
-            <p className="mt-2 text-[12px] text-[#9A917F]">{d.isOwner ? t("Vous êtes le fondateur : vous seul déléguez les droits d’administrateur, dans Paramètres.") : t("Vous êtes le seul administrateur : nommez-en un autre avant de quitter la famille.")}</p>
+            <p className="mt-2 text-[12px] text-[#9A917F]">{d.isOwner ? t("Vous êtes l’administrateur principal : vous seul déléguez les droits d’administrateur, dans Paramètres.") : t("Vous êtes le seul administrateur : nommez-en un autre avant de quitter la famille.")}</p>
           ) : (
             <button
               disabled={busy}

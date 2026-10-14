@@ -61,7 +61,7 @@ export default async function MembrePage({ params }: { params: Promise<{ id: str
       .map((m) => ({ id: m.id, caption: m.caption, year: m.year, photoId: m.photoId })),
     parents: parentsOf(s, p.id).map(link),
     parentKind: s.parentages.find((x) => x.childId === p.id)?.kind,
-    spouses: spousesOf(s, p.id).map(({ union, person }) => ({ ...link(person), rank: union.rank, kind: union.kind })),
+    spouses: spousesOf(s, p.id).map(({ union, person }) => ({ ...link(person), rank: union.rank, kind: union.kind, separated: union.separated, separatedYear: union.separatedYear })),
     children: childrenOf(s, p.id)
       .sort((a, b) => (a.birthYear ?? 9999) - (b.birthYear ?? 9999))
       .map(link),

@@ -34,7 +34,7 @@ export async function POST(req: NextRequest) {
       let p: Person;
       if (relation) {
         // Ajout par lien de parenté : l'arbre se range tout seul.
-        const newId_ = addRelative(s, anchorId!, relation, { givenName: b.givenName as string }, { side: b.side === "f" ? "f" : "m", viaId: txt(b.viaId, 40) });
+        const newId_ = addRelative(s, anchorId!, relation, { givenName: b.givenName as string }, { side: b.side === "f" ? "f" : "m", viaId: txt(b.viaId, 40), otherParentId: txt(b.otherParentId, 40) });
         p = s.persons.find((x) => x.id === newId_)!;
         const { parents: _p, spouses: _s, children: _c, ...rest } = b;
         void _p;

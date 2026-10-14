@@ -1,7 +1,9 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { fetchPublicPhoto } from "@/lib/local/sync";
+import { getDataVersion, mediaObjectUrl, showMedia, subscribeData } from "@/lib/local/store-core";
 import { useT } from "@/lib/i18n/client";
 import { treeFromCard, type PersonCard, type TreeCard } from "@/lib/share-code";
 import { layoutTree } from "@/lib/tree-layout";
@@ -26,6 +28,14 @@ const initialsOf = (n: string) =>
 
 export function SharedPerson({ card: c, footer }: { card: PersonCard; footer?: React.ReactNode }) {
   const t = useT();
+  const [photo, setPhoto] = useState<string | null>(null);
+  useEffect(() => {
+    if (!c.ph) return;
+    const [fid, mid] = c.ph.split("/");
+    let url = "";
+    void fetchPublicPhoto(fid, mid).then((b) => b && setPhoto((url = URL.createObjectURL(b))));
+    return () => void (url && URL.revokeObjectURL(url));
+  }, [c.ph]);
   const years = c.b ? (c.d ? `${c.b} – ${c.d}` : c.l ? t("né(e) en {a}", { a: c.b }) : `${c.b}`) : c.d ? `† ${c.d}` : "";
   const fam = c.f.replace(/^famille\s+/i, "");
   const rel = [
@@ -42,7 +52,12 @@ export function SharedPerson({ card: c, footer }: { card: PersonCard; footer?: R
         {t("FAMILLE {nom}", { nom: fam.toUpperCase() })}
       </motion.p>
       <motion.div {...up(0.4)} className="relative mt-7 flex h-[150px] w-[150px] items-center justify-center rounded-full border border-or/40 bg-[radial-gradient(circle_at_50%_35%,#2A4A33,#12261A)] shadow-[0_0_80px_rgba(200,161,90,0.25)]">
-        <span className="font-serif text-[52px] font-light text-or-pale">{initialsOf(c.n)}</span>
+        {photo ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <motion.img src={photo} alt="" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 1.2 }} className="absolute inset-0 h-full w-full rounded-full object-cover" style={!c.l ? { filter: "sepia(.35) contrast(1.02)" } : undefined} />
+        ) : (
+          <span className="font-serif text-[52px] font-light text-or-pale">{initialsOf(c.n)}</span>
+        )}
         {!c.l && (
           <svg viewBox="0 0 20 20" className="absolute -right-1 bottom-3 h-8 w-8">
             <path d={DOVE} fill="#E6D3A3" />
@@ -105,6 +120,23 @@ function Chip({ children }: { children: React.ReactNode }) {
 }
 
 export function SharedTree({ card }: { card: TreeCard }) {
+  // Les portraits arrivent un à un depuis l'espace en ligne de la famille.
+  const dataV = useSyncExternalStore(subscribeData, getDataVersion);
+  useEffect(() => {
+    if (!card.fid || !card.ph) return;
+    let stop = false;
+    void (async () => {
+      for (const mid of new Set(card.ph!.filter(Boolean))) {
+        if (stop || mediaObjectUrl(mid)) continue;
+        const b = await fetchPublicPhoto(card.fid!, mid);
+        if (b && !stop) showMedia(mid, b);
+      }
+    })();
+    return () => {
+      stop = true;
+    };
+  }, [card]);
+  void dataV;
   const layout = useMemo(() => {
     const { persons, unions, parentages } = treeFromCard(card);
     return layoutTree(persons, parentages, unions, new Set(), 390);

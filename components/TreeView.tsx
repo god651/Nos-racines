@@ -118,8 +118,11 @@ export function TreeView({ layout, mode, familyName, startId }: { layout: TreeLa
             ))}
             {layout.links.map((l) => (
               <g key={l.id}>
-                <motion.path d={l.d} fill="none" stroke={l.kind === "union" ? "#C8A15A" : "rgba(200,161,90,0.65)"} strokeWidth={l.kind === "union" ? 1.5 : 1.25} strokeDasharray={l.kind === "fostered" ? "3 4" : undefined} initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ delay: l.delay, duration: 1.6, ease: [0.4, 0, 0.2, 1] }} />
+                <motion.path d={l.d} fill="none" stroke={l.kind === "union" ? (l.separated ? "rgba(200,161,90,0.75)" : "#C8A15A") : "rgba(200,161,90,0.65)"} strokeWidth={l.kind === "union" ? 1.5 : 1.25} strokeLinecap="round" strokeDasharray={l.kind === "fostered" ? "3 4" : undefined} initial={{ pathLength: 0 }} animate={{ pathLength: 1 }} transition={{ delay: l.delay, duration: 1.6, ease: [0.4, 0, 0.2, 1] }} />
                 {l.kind === "child" && <path d={l.d} className="nr-sap" fill="none" stroke="#FFE3A6" strokeWidth="2.5" strokeLinecap="round" style={{ animationDelay: `${2 + l.delay * 2}s` }} />}
+                {l.kind === "union" && l.separated && l.sepYear && l.label && (
+                  <text x={l.label.x} y={l.label.y - (l.rank ? 10 : 0)} textAnchor="middle" fontSize="8" fill="rgba(230,211,163,0.75)">{l.sepYear}</text>
+                )}
                 {l.kind === "union" && l.rank && l.label && (
                   <text x={l.label.x} y={l.label.y} textAnchor="middle" fontSize="9" fill="#C8A15A">{l.rank === 1 ? t("1re") : t("{n}e", { n: l.rank })}</text>
                 )}

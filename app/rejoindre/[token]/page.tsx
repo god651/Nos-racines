@@ -20,7 +20,7 @@ export default async function RejoindrePage({ params }: { params: Promise<{ toke
       known={s.invites.some((i) => i.token === token || i.token === code)}
       cloud={cloud}
       needsName={!/^[A-Z0-9]{8}$/.test(code)}
-      invalidText={t("Ce code ou ce QR code n’est plus valable. Demandez-en un nouveau au fondateur de la famille.")}
+      invalidText={t("Ce code ou ce QR code n’est plus valable. Demandez-en un nouveau à l’administrateur principal de la famille.")}
     />
   );
 }

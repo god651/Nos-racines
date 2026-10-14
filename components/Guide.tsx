@@ -38,7 +38,7 @@ export function Guide({ userId, isAdmin, onDone }: { userId: string; isAdmin: bo
     ...COMMON,
     isAdmin
       ? { title: t("Vous êtes administrateur"), text: t("Le bouton + de l’arbre ajoute une personne en choisissant son lien : père, tante, cousin… L’arbre se range tout seul.") }
-      : { title: t("Vous êtes membre"), text: t("Vous voyez tout et pouvez jouer, écouter, allumer une bougie ou laisser un mot. Pour modifier l’arbre, le fondateur peut vous en donner le droit.") },
+      : { title: t("Vous êtes membre"), text: t("Vous voyez tout et pouvez jouer, écouter, allumer une bougie ou laisser un mot. Pour modifier l’arbre, l’administrateur principal peut vous en donner le droit.") },
   ];
   const [i, setI] = useState(0);
   const [hole, setHole] = useState<DOMRect | null>(null);

@@ -31,6 +31,7 @@ export default async function MoiPage() {
         },
         isLastAdmin: viewer.isOwner || (viewer.isAdmin && s.users.filter((x) => x.role === "admin").length <= 1),
         isOwner: viewer.isOwner,
+        isCreator: viewer.isCreator,
       }}
     />
   );

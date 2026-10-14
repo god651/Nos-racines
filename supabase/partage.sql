@@ -138,6 +138,30 @@ begin
   insert into nr_days (day, device_id) values (current_date, left(did, 64)) on conflict do nothing;
 end $$;
 
+-- Portraits visibles par tous ceux qui scannent un QR code (fiche ou arbre), même sans être de la famille.
+create table if not exists nr_public (
+  family_id  text not null references nr_families(id) on delete cascade,
+  mid        text not null,
+  primary key (family_id, mid)
+);
+alter table nr_public enable row level security;
+
+create or replace function nr_set_public(fid text, fkey text, mids text[]) returns void
+language plpgsql security definer set search_path = public as $$
+begin
+  perform nr_check(fid, fkey);
+  delete from nr_public where family_id = fid;
+  insert into nr_public (family_id, mid) select fid, m from unnest(mids[1:500]) m on conflict do nothing;
+end $$;
+
+create or replace function nr_public_media(fid text, mid text) returns table (mime text, b64 text)
+language plpgsql security definer set search_path = public as $$
+begin
+  return query select m.mime, encode(m.data, 'base64') from nr_media m
+    join nr_public p on p.family_id = m.family_id and p.mid = m.id
+    where m.family_id = fid and m.id = mid;
+end $$;
+
 -- Code de reprise personnel : sur un nouveau téléphone (ou après réinstallation),
 -- la personne tape son code et retrouve sa famille ET son propre compte.
 create table if not exists nr_recovery (
@@ -187,6 +211,6 @@ begin
   );
 end $$;
 
-revoke all on nr_families, nr_records, nr_media, nr_devices, nr_days, nr_recovery from anon, authenticated;
-grant execute on function nr_create, nr_push, nr_pull, nr_put_media, nr_get_media, nr_has_media, nr_ping, nr_creator_stats, nr_set_recovery, nr_get_recovery to anon, authenticated;
+revoke all on nr_families, nr_records, nr_media, nr_devices, nr_days, nr_recovery, nr_public from anon, authenticated;
+grant execute on function nr_create, nr_push, nr_pull, nr_put_media, nr_get_media, nr_has_media, nr_ping, nr_creator_stats, nr_set_recovery, nr_get_recovery, nr_set_public, nr_public_media to anon, authenticated;
 revoke execute on function nr_check from anon, authenticated, public;

@@ -87,7 +87,7 @@ export function addRelative(
   anchorId: string,
   relation: Relation,
   fields: Partial<Person> & Pick<Person, "givenName">,
-  opts: { side?: "m" | "f"; viaId?: string } = {},
+  opts: { side?: "m" | "f"; viaId?: string; otherParentId?: string } = {},
 ): string {
   const a = person(s, anchorId);
   if (!a) throw new KinError("Personne introuvable");
@@ -106,19 +106,22 @@ export function addRelative(
     return p.id;
   };
 
+  // « L'autre parent » choisi dans le formulaire : une personne de l'arbre, ou « none » (inconnu).
+  const other = opts.otherParentId && opts.otherParentId !== "none" && person(s, opts.otherParentId) ? opts.otherParentId : undefined;
   const asSiblingOf = (sibId: string, onlySide?: "m" | "f") => {
     let ps = parentsOf(s, sibId);
-    if (onlySide) ps = [ensureParent(s, sibId, onlySide)];
+    if (onlySide) ps = [ensureParent(s, sibId, onlySide), ...(other ? [other] : [])];
     else if (!ps.length) ps = [ensureParent(s, sibId, "m"), ensureParent(s, sibId, "f")];
     const p = makePerson(s, f);
     s.parentages.push({ childId: p.id, parentIds: [...ps], kind: "biological" });
     return p.id;
   };
 
-  const asChildOf = (parentId: string) => {
+  const asChildOf = (parentId: string, chosen?: string) => {
     const p = makePerson(s, f);
     const sp = spousesOf(s, parentId);
-    s.parentages.push({ childId: p.id, parentIds: sp.length === 1 ? [parentId, sp[0]] : [parentId], kind: "biological" });
+    const second = chosen ? (chosen === "none" ? undefined : chosen) : sp.length === 1 ? sp[0] : undefined;
+    s.parentages.push({ childId: p.id, parentIds: second && second !== parentId ? [parentId, second] : [parentId], kind: "biological" });
     return p.id;
   };
 
@@ -142,7 +145,7 @@ export function addRelative(
       return asSiblingOf(a.id, side);
     case "fils":
     case "fille":
-      return asChildOf(a.id);
+      return asChildOf(a.id, opts.otherParentId);
     case "epoux":
     case "epouse": {
       const p = makePerson(s, f);

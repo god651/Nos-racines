@@ -35,6 +35,9 @@ export interface Link {
   id: string;
   d: string;
   kind: "union" | "child" | "fostered";
+  /** Couple séparé : le lien est une vague (et l'année de séparation). */
+  separated?: boolean;
+  sepYear?: number;
   rank?: number;
   label?: { x: number; y: number };
   delay: number;
@@ -277,8 +280,17 @@ export function layoutTree(persons: Person[], parentages: Parentage[], unions: U
     const b = pos.get(u.partnerB);
     if (!a || !b) continue;
     const [l, r] = a.x < b.x ? [a, b] : [b, a];
-    const d = a.y === b.y ? `M${l.x + l.r} ${l.y} H${r.x - r.r}` : `M${l.x} ${l.y} L${r.x} ${r.y}`;
-    links.push({ id: u.id, d, kind: "union", rank: u.rank, label: { x: (l.x + r.x) / 2, y: l.y - 8 }, delay: 0.3 });
+    let d = a.y === b.y ? `M${l.x + l.r} ${l.y} H${r.x - r.r}` : `M${l.x} ${l.y} L${r.x} ${r.y}`;
+    if (u.separated && a.y === b.y) {
+      // Une vague douce entre ex-conjoints.
+      const x0 = l.x + l.r + 2;
+      const x1 = r.x - r.r - 2;
+      const n = Math.max(2, Math.round((x1 - x0) / 9));
+      const step = (x1 - x0) / n;
+      d = `M${x0} ${l.y}`;
+      for (let i = 0; i < n; i++) d += ` q${(step / 2).toFixed(1)} ${i % 2 ? 4 : -4} ${step.toFixed(1)} 0`;
+    }
+    links.push({ id: u.id, d, kind: "union", rank: u.rank, separated: !!u.separated, sepYear: u.separatedYear, label: { x: (l.x + r.x) / 2, y: l.y - 8 }, delay: 0.3 });
   }
   for (const pa of parentages) {
     const child = pos.get(pa.childId);

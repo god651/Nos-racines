@@ -30,8 +30,9 @@ export interface SettingsData {
   family: { name: string; village: string; motto: string; since?: number; introPhotoId?: string; introCaption?: string };
   covers: string[];
   candidates: string[];
-  users: { id: string; name: string; role: Role; personName?: string; isOwner: boolean; code?: string; connected: boolean }[];
+  users: { id: string; name: string; role: Role; personName?: string; isOwner: boolean; isCreator: boolean; code?: string; connected: boolean }[];
   isOwner: boolean;
+  isCreator: boolean;
   persons: { id: string; name: string }[];
   maxAdmins: number;
   settings: { onlineFeatures: boolean; defaultVisibility: Visibility; language: Lang; keyHint: string; envKey: boolean };
@@ -479,7 +480,7 @@ function AccountsSection({ d }: { d: SettingsData }) {
     <div id="comptes" className="scroll-mt-16">
       <Card
         title={t("Comptes de la famille")}
-        hint={t("Les membres voient tout sans rien modifier. Seul le fondateur peut donner les droits d’administrateur ({n} sur {max}).", { n: admins, max: d.maxAdmins })}
+        hint={t("Les membres voient tout sans rien modifier. Seul l’administrateur principal peut donner les droits d’administrateur ({n} sur {max}).", { n: admins, max: d.maxAdmins })}
       >
         <ul className="divide-y divide-kapok">
           {d.users.map((u) => (
@@ -495,7 +496,7 @@ function AccountsSection({ d }: { d: SettingsData }) {
                     {[u.personName && t("Dans l’arbre : {nom}", { nom: u.personName }), !u.connected && t("Pas encore connecté")].filter(Boolean).join(" · ")}
                   </span>
                 </span>
-                {u.isOwner ? <span className="rounded-full bg-nuit px-2.5 py-1 text-[11px] font-semibold text-or">{t("Fondateur")}</span> : <RoleBadge admin={u.role === "admin"} />}
+                {u.isCreator ? <span className="rounded-full bg-nuit px-2.5 py-1 text-[11px] font-semibold text-or">{t("Fondateur")}</span> : u.isOwner ? <span className="rounded-full border border-nuit px-2.5 py-1 text-[11px] font-semibold text-nuit">{t("Administrateur principal")}</span> : <RoleBadge admin={u.role === "admin"} />}
               </div>
               {(u.code || shown === u.id) && d.isAdmin && <AccessCode userId={u.id} code={u.code} name={u.name} open={shown === u.id} onToggle={() => setShown(shown === u.id ? null : u.id)} />}
               {d.isAdmin && !u.isOwner && (
@@ -809,6 +810,7 @@ function AboutSection({ d }: { d: SettingsData }) {
             <button onClick={() => openExternal(APK_URL)} className="mt-2 text-[12px] text-foret underline">{t("Ouvrir le lien de téléchargement")}</button>
           </div>
         )}
+        {!d.isCreator && <CreatorUnlock />}
         <p className="mt-4 text-[12px] leading-relaxed text-[#6B6455]">
           {t("NOS RACINES, version {v}. Gratuit. Vos données restent dans votre famille : rien n’est envoyé sur Internet, sauf les textes à traduire. L’intelligence artificielle ne recrée jamais la voix d’une personne.", { v: version })}
         </p>
@@ -842,7 +844,7 @@ function SharingSection({ d }: { d: SettingsData }) {
                   : st.error === "reseau"
                     ? t("Pas de connexion : tout est gardé ici et partira dès le retour d’Internet.")
                     : st.error === "refus"
-                      ? t("Accès refusé : demandez un nouveau QR code « Rejoindre » au fondateur.")
+                      ? t("Accès refusé : demandez un nouveau QR code « Rejoindre » à l’administrateur principal.")
                       : ago === null
                         ? t("Activé")
                         : ago < 1
@@ -889,9 +891,53 @@ function SharingSection({ d }: { d: SettingsData }) {
             </PrimaryButton>
           </>
         ) : (
-          <p className="text-[13px] text-[#6B6455]">{t("Le fondateur de la famille peut activer le partage. Vous recevrez ensuite tout en scannant son QR code « Rejoindre ».")}</p>
+          <p className="text-[13px] text-[#6B6455]">{t("L’administrateur principal de la famille peut activer le partage. Vous recevrez ensuite tout en scannant son QR code « Rejoindre ».")}</p>
         )}
       </Card>
     </div>
+  );
+}
+
+/** Le créateur de l'application se fait reconnaître (titre « Fondateur », espace du fondateur). */
+function CreatorUnlock() {
+  const t = useT();
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [code, setCode] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  if (!open)
+    return (
+      <button onClick={() => setOpen(true)} className="mt-4 text-[11px] text-[#9A917F] underline">
+        {t("Créateur de l’application ?")}
+      </button>
+    );
+  return (
+    <form
+      className="mt-4 rounded-[14px] bg-kapok p-3"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setBusy(true);
+        setErr(null);
+        try {
+          await api("/api/createur", "POST", { code });
+          sound.play("success");
+          router.refresh();
+        } catch (x) {
+          setErr((x as Error).message);
+        } finally {
+          setBusy(false);
+        }
+      }}
+    >
+      <p className="text-[12px] text-foret">{t("Entrez votre code créateur.")}</p>
+      <div className="mt-2 flex gap-2">
+        <input value={code} onChange={(e) => setCode(e.target.value)} autoCapitalize="characters" autoComplete="off" className="min-w-0 flex-1 rounded-[12px] border border-or-pale bg-coton px-3 py-2 text-center font-serif tracking-[3px] text-nuit outline-none focus:border-or" />
+        <button disabled={busy || code.trim().length < 6} className="rounded-full bg-foret px-4 text-[13px] font-semibold text-coton disabled:opacity-40">
+          {busy ? "…" : t("Valider")}
+        </button>
+      </div>
+      <ErrorNote message={err} />
+    </form>
   );
 }
