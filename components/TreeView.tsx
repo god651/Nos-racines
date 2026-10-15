@@ -2,7 +2,7 @@
 
 import { animate, AnimatePresence, motion, useMotionValue } from "framer-motion";
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { mediaUrl } from "@/lib/client";
 import { useT } from "@/lib/i18n/client";
 import { sound } from "@/lib/sound";
@@ -32,11 +32,30 @@ export function TreeView({ layout, mode, familyName, startId }: { layout: TreeLa
     setSheet(false);
     const vw = Math.min(window.innerWidth, 440);
     const vh = window.innerHeight - 118 - 110;
-    const z = Math.max(0.35, Math.min(1, (vw - 16) / layout.width, vh / layout.height));
+    const z = Math.max(0.1, Math.min(1, (vw - 16) / layout.width, vh / layout.height));
     setZoom(z);
     void animate(dx, (vw - layout.width * z) / 2 - 195 * (1 - z), { type: "spring", stiffness: 120, damping: 20 });
     void animate(dy, 6 - 120 * (1 - z), { type: "spring", stiffness: 120, damping: 20 });
   };
+  // Zoom à deux doigts, comme une carte.
+  const pinch = useRef<{ pts: Map<number, { x: number; y: number }>; d0: number; z0: number }>({ pts: new Map(), d0: 0, z0: 1 });
+  const dist = () => {
+    const [a, b] = [...pinch.current.pts.values()];
+    return a && b ? Math.hypot(a.x - b.x, a.y - b.y) : 0;
+  };
+  const onPointerDown = (e: React.PointerEvent) => {
+    pinch.current.pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch.current.pts.size === 2) {
+      pinch.current.d0 = dist();
+      pinch.current.z0 = zoom;
+    }
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    if (!pinch.current.pts.has(e.pointerId)) return;
+    pinch.current.pts.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (pinch.current.pts.size === 2 && pinch.current.d0 > 20) setZoom(Math.max(0.1, Math.min(1.8, (pinch.current.z0 * dist()) / pinch.current.d0)));
+  };
+  const onPointerUp = (e: React.PointerEvent) => void pinch.current.pts.delete(e.pointerId);
   const [query, setQuery] = useState("");
   const sel = useMemo(() => layout.nodes.find((n) => n.id === selId), [layout, selId]);
   const matches = useMemo(() => (query.trim() ? new Set(layout.nodes.filter((n) => norm(`${n.name} ${n.sub}`).includes(norm(query))).map((n) => n.id)) : null), [query, layout]);
@@ -98,12 +117,16 @@ export function TreeView({ layout, mode, familyName, startId }: { layout: TreeLa
       <motion.div
         className="absolute left-0 top-[118px] cursor-grab touch-none active:cursor-grabbing"
         style={{ width: layout.width, height: layout.height, transformOrigin: "195px 120px", x: dx, y: dy }}
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
         onTap={(e) => {
           // Toucher le fond (pas un portrait) ferme la fiche.
           if (!(e.target as HTMLElement).closest?.("button")) setSheet(false);
         }}
         drag
-        dragConstraints={{ left: -extra - 140, right: 140, top: -Math.max(0, layout.height - 380), bottom: 120 }}
+        dragConstraints={{ left: -extra - 240, right: 240, top: -Math.max(0, layout.height - 380) - 120, bottom: 160 }}
         dragElastic={0.15}
         animate={{ scale: zoom }}
         transition={{ type: "spring", stiffness: 120, damping: 20 }}
@@ -222,8 +245,8 @@ export function TreeView({ layout, mode, familyName, startId }: { layout: TreeLa
 
       <div className="absolute right-4 top-[330px] z-20 flex flex-col gap-2">
         {[
-          { l: t("Zoomer"), d: "M12 5v14M5 12h14", f: () => setZoom((z) => Math.min(1.8, z + 0.2)) },
-          { l: t("Dézoomer"), d: "M5 12h14", f: () => setZoom((z) => Math.max(0.35, z - 0.2)) },
+          { l: t("Zoomer"), d: "M12 5v14M5 12h14", f: () => setZoom((z) => Math.min(1.8, z >= 0.4 ? z + 0.2 : z / 0.75)) },
+          { l: t("Dézoomer"), d: "M5 12h14", f: () => setZoom((z) => Math.max(0.1, z > 0.4 ? z - 0.2 : z * 0.75)) },
           { l: t("Voir tout l’arbre"), d: "M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5", f: fitAll },
         ].map((b) => (
           <button key={b.l} onClick={b.f} aria-label={b.l} className="flex h-11 w-11 items-center justify-center rounded-full border border-or-pale/25 bg-coton/10 backdrop-blur-md">

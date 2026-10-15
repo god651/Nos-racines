@@ -51,10 +51,10 @@ export interface TreeLayout {
   rowsY: number[];
 }
 
-const ROW_GAP = 124;
+const ROW_GAP = 176;
 const TOP = 52;
 const RADIUS = [27, 23, 21, 19, 17, 16];
-const MIN_GAP = 70;
+const MIN_GAP = 104;
 const EDGE = 64; // place pour les numéros de génération à gauche
 
 export function layoutTree(persons: Person[], parentages: Parentage[], unions: Union[], voiceIds: Set<string>, minWidth = 390, annivs: Map<string, "birth" | "death"> = new Map()): TreeLayout {
@@ -190,7 +190,7 @@ export function layoutTree(persons: Person[], parentages: Parentage[], unions: U
       const sub = layoutUnit(c, kidSide.get(c) ?? side);
       const key = groupKey(c);
       // Un peu plus d'air entre les enfants de deux unions différentes (demi-frères et demi-sœurs).
-      const gap = prevKey !== undefined && key !== prevKey ? MIN_GAP + 26 : MIN_GAP;
+      const gap = prevKey !== undefined && key !== prevKey ? MIN_GAP + 44 : MIN_GAP + 12;
       prevKey = key;
       const dx = contour.size ? clearance(contour, sub.contour, 1, gap) : -sub.anchor;
       const shift = Number.isFinite(dx) ? dx : (Math.max(...[...contour.values()].map((v) => v[1])) + gap - Math.min(...[...sub.contour.values()].map((v) => v[0])));
@@ -241,33 +241,79 @@ export function layoutTree(persons: Person[], parentages: Parentage[], unions: U
 
   const xs = new Map<string, number>();
   const acc: Contour = new Map();
-  for (const r of roots) {
+  // Les descendants d'une racine déjà placés ailleurs (mariés dans une autre lignée) : ils disent
+  // de quel côté poser cette lignée, collée à l'autre, pour que le lien reste court et ne croise personne.
+  const descendants = (r: string) => {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    const q = [r, ...(spouseOf.get(r) ?? [])];
+    while (q.length) {
+      const x = q.shift()!;
+      if (seen.has(x)) continue;
+      seen.add(x);
+      for (const c of childrenOf.get(x) ?? []) {
+        out.push(c);
+        q.push(c);
+      }
+    }
+    return out;
+  };
+  const anchorsOf = (r: string) => {
+    const set = new Set<string>();
+    for (const d of descendants(r)) {
+      if (xs.has(d)) set.add(d);
+      for (const sp of spouseOf.get(d) ?? []) if (xs.has(sp) && !descendants(r).includes(sp)) set.add(sp);
+    }
+    return [...set];
+  };
+  const pending = [...roots];
+  while (pending.length) {
+    // La prochaine lignée : celle qui est le plus liée à ce qui est déjà posé ; sinon la plus grande.
+    let pickAt = 0;
+    if (acc.size) {
+      let best = -1;
+      pending.forEach((r, i) => {
+        if (visited.has(r)) return;
+        const n = anchorsOf(r).length;
+        if (n > best) {
+          best = n;
+          pickAt = i;
+        }
+      });
+    }
+    const r = pending.splice(pickAt, 1)[0];
     if (visited.has(r)) continue;
-    // Les enfants déjà placés (un conjoint venu d'une autre famille) indiquent où se mettre.
-    const ghosts = [r, ...(spouseOf.get(r) ?? [])].flatMap((m) => childrenOf.get(m) ?? []).filter((c) => xs.has(c));
-    const sub = layoutUnit(r, 1);
     if (!acc.size) {
+      const sub = layoutUnit(r, 1);
       for (const [id, x] of sub.xs) xs.set(id, x);
       mergeContour(acc, sub.contour, 0);
       continue;
     }
-    const placedMid = (() => {
-      const all = [...acc.values()];
-      return (Math.min(...all.map((v) => v[0])) + Math.max(...all.map((v) => v[1]))) / 2;
-    })();
+    const all = [...acc.values()];
+    const placedL = Math.min(...all.map((v) => v[0]));
+    const placedR = Math.max(...all.map((v) => v[1]));
+    const anchors = anchorsOf(r);
+    const target = anchors.length ? anchors.reduce((s, c) => s + xs.get(c)!, 0) / anchors.length : placedR;
+    const sideTo: 1 | -1 = target >= (placedL + placedR) / 2 ? 1 : -1;
+    // Posée à droite, ses liens vers l'autre lignée partent à gauche (et inversement).
+    const sub = layoutUnit(r, anchors.length ? (sideTo === 1 ? -1 : 1) : 1);
+    const gap = MIN_GAP + 40;
+    const need = clearance(acc, sub.contour, sideTo, gap);
     let shift: number;
-    if (ghosts.length) {
-      const target = ghosts.reduce((s, c) => s + xs.get(c)!, 0) / ghosts.length;
-      // Le centre du foyer au-dessus de l'enfant.
+    if (!Number.isFinite(need)) {
+      // Aucune rangée en commun : on la place au plus près de ses liens.
       const unitXs = [r, ...(spouseOf.get(r) ?? [])].map((m) => sub.xs.get(m)).filter((x): x is number => x !== undefined);
       const mid = (Math.min(...unitXs) + Math.max(...unitXs)) / 2;
-      const want = target - mid;
-      const sideTo: 1 | -1 = target >= placedMid ? 1 : -1;
-      const need = clearance(acc, sub.contour, sideTo, MIN_GAP + 10);
-      shift = !Number.isFinite(need) ? want : sideTo === 1 ? Math.max(want, need) : Math.min(want, need);
+      shift = anchors.length ? target - mid : placedR + gap - Math.min(...[...sub.contour.values()].map((v) => v[0]));
     } else {
-      const need = clearance(acc, sub.contour, 1, MIN_GAP + 20);
-      shift = Number.isFinite(need) ? need : Math.max(...[...acc.values()].map((v) => v[1])) + MIN_GAP + 20 - Math.min(...[...sub.contour.values()].map((v) => v[0]));
+      // Collée à la lignée liée ; pour un conjoint venu d'ailleurs, ses parents au-dessus de lui si possible.
+      const ghosts = [r, ...(spouseOf.get(r) ?? [])].flatMap((m) => childrenOf.get(m) ?? []).filter((c) => xs.has(c));
+      if (ghosts.length) {
+        const gx = ghosts.reduce((s, c) => s + xs.get(c)!, 0) / ghosts.length;
+        const unitXs = [r, ...(spouseOf.get(r) ?? [])].map((m) => sub.xs.get(m)).filter((x): x is number => x !== undefined);
+        const want = gx - (Math.min(...unitXs) + Math.max(...unitXs)) / 2;
+        shift = sideTo === 1 ? Math.max(want, need) : Math.min(want, need);
+      } else shift = need;
     }
     for (const [id, x] of sub.xs) xs.set(id, x + shift);
     mergeContour(acc, sub.contour, shift);
@@ -321,9 +367,13 @@ export function layoutTree(persons: Person[], parentages: Parentage[], unions: U
     const arcTop = l.y - l.r - Math.min(46, 16 + (r.x - l.x) / 6) / 2 - 4;
     links.push({ id: u.id, d, kind: "union", rank: u.rank, separated: !!u.separated, sepYear: u.separatedYear, label: { x: (l.x + r.x) / 2, y: between ? arcTop : l.y - 8 }, delay: 0.3 });
   }
-  const bars = new Map<string, number>();
-  const barsAtRow = new Map<number, number>();
-  for (const pa of [...parentages].sort((a, b) => (pos.get(a.parentIds[0])?.x ?? 0) - (pos.get(b.parentIds[0])?.x ?? 0))) {
+  // ── Liens parents → enfants ─────────────────────────────────────────
+  // Chaque couple a sa barre horizontale. Sur une même rangée, les barres qui se recouvrent
+  // sont posées à des hauteurs différentes, choisies pour croiser le moins possible les traits
+  // des autres familles (jamais deux barres l'une sur l'autre).
+  interface Fam { key: string; sx: number; sy: number; top: number; kids: { pa: Parentage; x: number; y: number }[]; l: number; r: number; level: number }
+  const fams = new Map<string, Fam>();
+  for (const pa of parentages) {
     const child = pos.get(pa.childId);
     const parents = pa.parentIds.map((id) => pos.get(id)).filter(Boolean) as NodePos[];
     if (!child || !parents.length) continue;
@@ -340,11 +390,60 @@ export function layoutTree(persons: Person[], parentages: Parentage[], unions: U
         sy = own.y + own.r;
       }
     }
-    // Chaque couple a sa propre barre horizontale : deux familles voisines ne se mélangent pas.
-    const barKey = `${Math.round(sx)}:${sy}`;
-    if (!bars.has(barKey)) bars.set(barKey, (barsAtRow.get(sy) ?? 0) % 3), barsAtRow.set(sy, (barsAtRow.get(sy) ?? 0) + 1);
-    const midY = Math.round((sy + child.y - child.r) / 2 + 10 - bars.get(barKey)! * 9);
-    links.push({ id: `${pa.parentIds.join("-")}>${pa.childId}`, d: `M${sx} ${sy} V${midY} H${child.x} V${child.y - child.r}`, kind: pa.kind === "biological" ? "child" : "fostered", delay: 0.4 + child.generation * 0.35 });
+    const key = `${[...pa.parentIds].sort().join("-")}`;
+    const f = fams.get(key) ?? { key, sx, sy, top: Math.max(...parents.map((p) => p.y)), kids: [], l: sx, r: sx, level: 0 };
+    f.kids.push({ pa, x: child.x, y: child.y - child.r });
+    f.l = Math.min(f.l, child.x);
+    f.r = Math.max(f.r, child.x);
+    fams.set(key, f);
+  }
+  // Rangée par rangée (selon la génération des parents).
+  const byTop = new Map<number, Fam[]>();
+  for (const f of fams.values()) byTop.set(f.top, [...(byTop.get(f.top) ?? []), f]);
+  const barY = new Map<string, number>();
+  for (const [top, list] of byTop) {
+    const childTop = Math.min(...list.flatMap((f) => f.kids.map((k) => k.y)));
+    const lo = top + 50; // sous les noms des parents
+    const hi = childTop - 16; // au-dessus des portraits des enfants
+    const LEVELS = Math.max(1, Math.floor((hi - lo) / 12) + 1);
+    const yOf = (lv: number, n: number) => (n <= 1 ? (lo + hi) / 2 : lo + ((hi - lo) * lv) / (n - 1));
+    // Les familles les plus étroites d'abord : elles ont le plus de chances de rester sur la ligne du milieu.
+    const order = [...list].sort((a, b) => a.r - a.l - (b.r - b.l) || a.l - b.l);
+    const placed: Fam[] = [];
+    const used = Math.min(LEVELS, Math.max(1, list.length));
+    const n = Math.min(LEVELS, 2 * used + 1);
+    const mid = Math.floor((n - 1) / 2);
+    for (const f of order) {
+      let best = mid;
+      let bestCost = Infinity;
+      for (let lv = 0; lv < n; lv++) {
+        const y = yOf(lv, n);
+        let cost = Math.abs(lv - mid) * 0.01;
+        for (const g of placed) {
+          const gy = yOf(g.level, n);
+          // Deux barres sur la même ligne qui se recouvrent : interdit.
+          if (Math.abs(gy - y) < 6 && Math.min(f.r, g.r) - Math.max(f.l, g.l) > -14) cost += 1000;
+          // Mon trait de descente traverse la barre de l'autre (ou l'inverse).
+          if (f.sx > g.l && f.sx < g.r && gy < y) cost += 1;
+          if (g.sx > f.l && g.sx < f.r && y < gy) cost += 1;
+          // Les traits vers mes enfants traversent la barre de l'autre (ou l'inverse).
+          for (const k of f.kids) if (k.x > g.l && k.x < g.r && gy > y) cost += 1;
+          for (const k of g.kids) if (k.x > f.l && k.x < f.r && y > gy) cost += 1;
+        }
+        if (cost < bestCost) {
+          bestCost = cost;
+          best = lv;
+        }
+      }
+      f.level = best;
+      placed.push(f);
+      barY.set(f.key, Math.round(yOf(best, n)));
+    }
+  }
+  for (const f of fams.values()) {
+    const midY = barY.get(f.key)!;
+    for (const k of f.kids)
+      links.push({ id: `${k.pa.parentIds.join("-")}>${k.pa.childId}`, d: `M${f.sx} ${f.sy} V${midY} H${k.x} V${k.y}`, kind: k.pa.kind === "biological" ? "child" : "fostered", delay: 0.4 + (pos.get(k.pa.childId)!.generation) * 0.35 });
   }
 
   const rowsY = [...new Set([...pos.values()].map((p) => p.y))].sort((a, b) => a - b);
