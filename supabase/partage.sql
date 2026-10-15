@@ -645,3 +645,25 @@ grant execute on function nr_me(), nr_set_profile(text), nr_claim_creator(text),
   nr_claim_person(text, text), nr_set_member(text, uuid, text, text, boolean, boolean), nr_remove_member(text, uuid), nr_write(text, jsonb), nr_pull(text, bigint),
   nr_history(text, bigint, int), nr_coffre_put(text, text, date, text, text), nr_coffre_get(text, text), nr_coffre_author(text, text, text) to authenticated;
 grant execute on function nr_ping(text, text, text), nr_creator_stats(text), nr_role(text), nr_storage_ok(text) to anon, authenticated;
+-- Le Griot (questions libres) : au plus 40 questions par personne et par jour.
+create table if not exists nr_griot_usage (
+  user_id  uuid not null,
+  day      date not null default current_date,
+  n        int not null default 0,
+  primary key (user_id, day)
+);
+alter table nr_griot_usage enable row level security;
+revoke all on nr_griot_usage from anon, authenticated;
+
+-- Compte une question ; renvoie ce qu'il reste aujourd'hui (négatif : limite atteinte).
+create or replace function nr_griot_tick(fid text) returns int
+language plpgsql security definer set search_path = public as $$
+declare used int;
+begin
+  perform nr_need(fid, array['admin', 'editeur', 'lecteur']);
+  insert into nr_griot_usage (user_id, day, n) values (auth.uid(), current_date, 1)
+  on conflict (user_id, day) do update set n = nr_griot_usage.n + 1
+  returning n into used;
+  return 40 - used;
+end $$;
+grant execute on function nr_griot_tick(text) to authenticated;

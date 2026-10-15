@@ -1,0 +1,6 @@
+# Projet Supabase de NOS RACINES (déployé par l'intégration GitHub).
+project_id = "nos-racines"
+
+[functions.griot]
+enabled = true
+verify_jwt = true

@@ -63,7 +63,7 @@ function answer(s: Store, q: string, t: T, me?: string) {
     if (fans.length) return { answer: t("{n} personne(s) : {noms}.", { n: fans.length, noms: fans.map(fullName).join(", ") }), card: fans.length === 1 ? card(t, fans[0]) : undefined, source: t("Fiches de la famille") };
   }
   if (!target) {
-    return { answer: t("Je réponds à partir de vos fiches. Essayez : « Combien de générations avons-nous ? » ou « Qui sont les enfants de … ? »"), source: t("Le Griot de la famille") };
+    return { answer: t("Je réponds à partir de vos fiches. Essayez : « Combien de générations avons-nous ? » ou « Qui sont les enfants de … ? »"), source: t("Le Griot de la famille"), fallback: true };
   }
   if (n.includes("plat") || n.includes("manger") || n.includes("mange") || n.includes("cuisine") || n.includes("dish") || n.includes("food")) {
     const d = target.favoriteDishes ?? [];
@@ -98,6 +98,7 @@ function answer(s: Store, q: string, t: T, me?: string) {
   }
   const stories = s.stories.filter((x) => x.personId === target!.id).length;
   return {
+    fallback: true,
     answer: [target.bio, stories ? t("{n} récit(s) enregistré(s).", { n: stories }) : ""].filter(Boolean).join(" ") || t("Voici la fiche de {nom}.", { nom: fullName(target) }),
     card: card(t, target),
     source: t("Fiche de {nom}", { nom: target.givenName }),

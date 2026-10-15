@@ -1188,4 +1188,14 @@ export const EN: Record<string, string> = {
   "année de séparation": "year of separation",
   "titre": "title",
   "texte": "text",
+  // Griot en ligne
+  "Comment suis-je lié(e) aux autres branches de la famille ?": "How am I related to the other branches of the family?",
+  "Le Griot, à partir de toute la famille": "The Griot, from the whole family",
+  "Les questions libres ne sont pas encore ouvertes pour cette famille. Je réponds aux questions précises sur l’arbre : liens, dates, lieux.": "Open questions are not available for this family yet. I answer precise questions about the tree: links, dates, places.",
+  "Pour cette question, il faut une connexion Internet : le Griot en ligne lit toute la famille pour vous répondre. Connectez-vous, puis reposez-la.": "This question needs an Internet connection: the online Griot reads the whole family to answer you. Connect, then ask again.",
+  "Que signifie le nom {nom} ?": "What does the name {nom} mean?",
+  "Quelles questions poser à nos anciens pour garder leur mémoire ?": "What should we ask our elders to keep their memory?",
+  "Questions libres avec Internet, questions précises sans": "Open questions online, precise questions offline",
+  "Raconte-moi la vie de {nom}": "Tell me about {nom}’s life",
+  "Vous avez posé beaucoup de questions libres aujourd’hui. Revenez demain ; en attendant, je réponds aux questions précises sur l’arbre.": "You have asked many open questions today. Come back tomorrow; meanwhile, I answer precise questions about the tree.",
 };
