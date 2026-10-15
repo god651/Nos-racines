@@ -1,67 +1,44 @@
-import nuage from "@/nuage.json";
-import type { Store } from "@/lib/types";
+import type { Role, Store, User } from "@/lib/types";
 import { APP_VERSION } from "@/lib/native";
-import { applyRemote, idbGet, idbPut, kv, mediaBlob, newId, onMutate, putMedia, read } from "./store-core";
+import { cloudAvailable as CLOUD, downloadMedia, getSession, myUid, publicPortraitUrl, rpc, supa, uploadMedia } from "@/lib/cloud";
+import { applyRemote, idbGet, idbPut, kv, mediaBlob, newId, onMutate, putMedia, read, refreshPages, replaceAll } from "./store-core";
 
 // ═══════════════════════════════════════════════════════════════════
-// Partage en direct entre les téléphones de la famille.
-// Chaque téléphone garde toute la famille (l'application marche sans Internet) ;
-// quand il y a du réseau, il envoie ce qui a changé et reçoit ce que les autres ont fait.
-// Les coffres du futur voyagent chiffrés (leur clé est confiée au gardien, jamais aux autres téléphones) ;
-// les connexions restent dans chaque téléphone.
+// La famille unique, en ligne, partagée en temps réel.
+// Le téléphone garde une copie (l'application marche sans Internet) ; la base centrale
+// est la référence. Chaque fiche a un numéro de version : si deux personnes modifient
+// la même fiche en même temps, le téléphone fusionne champ par champ au lieu d'écraser.
+// Le serveur vérifie le rôle de chacun (administrateur, éditeur, lecteur) pour chaque fiche.
 // ═══════════════════════════════════════════════════════════════════
 
-const URL_ = (import.meta.env.VITE_SUPABASE_URL as string | undefined) || nuage.url;
-const KEY_ = (import.meta.env.VITE_SUPABASE_KEY as string | undefined) || nuage.key;
-export const cloudAvailable = !!(URL_ && KEY_);
+export const cloudAvailable = CLOUD;
 
 export interface CloudLink {
   fid: string;
-  key: string;
+  uid: string;
 }
 export const getLink = (): CloudLink | null => {
   try {
-    const v = JSON.parse(kv.get("nr_nuage") ?? "null") as CloudLink | null;
-    return v?.fid && v.key ? v : null;
+    const v = JSON.parse(kv.get("nr_famille_en_ligne") ?? "null") as CloudLink | null;
+    return v?.fid && v.uid && v.uid === myUid() ? v : null;
   } catch {
     return null;
   }
 };
-const setLink = (l: CloudLink | null) => (l ? kv.set("nr_nuage", JSON.stringify(l)) : kv.del("nr_nuage"));
-/** Relie ce téléphone à l'espace d'une famille (sauvegarde restaurée) : tout sera comparé au prochain tour. */
-export function setCloudLink(l: CloudLink) {
-  setLink(l);
-  kv.set("nr_nuage_seq", "0");
-  shadow = new Map();
-  shadowLoaded = true;
-  void idbPut("nuage_ombre", []);
-}
-/** Texte ajouté au QR code « Rejoindre » : l'adresse de l'espace de la famille. */
-export const linkSuffix = () => {
-  const l = getLink();
-  return l ? `@${l.fid}.${l.key}` : "";
-};
-
-async function rpc<T>(fn: string, args: Record<string, unknown>): Promise<T> {
-  const r = await fetch(`${URL_.replace(/\/$/, "")}/rest/v1/rpc/${fn}`, {
-    method: "POST",
-    headers: { apikey: KEY_, Authorization: `Bearer ${KEY_}`, "Content-Type": "application/json" },
-    body: JSON.stringify(args),
-  });
-  if (!r.ok) {
-    const txt = await r.text().catch(() => "");
-    throw new Error(/NR_ACCES_REFUSE/.test(txt) ? "NR_ACCES_REFUSE" : `HTTP ${r.status}`);
-  }
-  const txt = await r.text();
-  return (txt ? JSON.parse(txt) : null) as T;
-}
+const setLink = (l: CloudLink | null) => (l ? kv.set("nr_famille_en_ligne", JSON.stringify(l)) : kv.del("nr_famille_en_ligne"));
+/** Ancienne sauvegarde : le lien n'y voyage plus (chaque personne se connecte avec son compte). */
+export function setCloudLink(_l: unknown) {}
+/** Le QR code « Rejoindre » en ligne contient seulement le code d'invitation. */
+export const linkSuffix = () => "";
 
 // ─── Ce qui voyage ───
-type Coll = "family" | "settings" | "translations" | "users" | "invites" | "persons" | "unions" | "parentages" | "stories" | "memories" | "media" | "tributes" | "quizScores" | "capsules";
-const LISTS: Coll[] = ["users", "invites", "persons", "unions", "parentages", "stories", "memories", "media", "tributes", "quizScores", "capsules"];
-const idOf = (coll: Coll, x: Record<string, unknown>) => String(coll === "parentages" ? x.childId : x.id);
+type Coll = "family" | "settings" | "translations" | "persons" | "unions" | "parentages" | "stories" | "memories" | "media" | "tributes" | "quizScores" | "capsules";
+const LISTS = ["persons", "unions", "parentages", "stories", "memories", "media", "tributes", "quizScores", "capsules"] as const;
+type ListColl = (typeof LISTS)[number];
+const isList = (c: string): c is ListColl => (LISTS as readonly string[]).includes(c);
+const idOf = (coll: string, x: Record<string, unknown>) => String(coll === "parentages" ? x.childId : x.id);
 
-const canon = (v: unknown): string =>
+export const canon = (v: unknown): string =>
   v === null || typeof v !== "object"
     ? JSON.stringify(v ?? null)
     : Array.isArray(v)
@@ -80,25 +57,46 @@ function records(s: Store) {
   for (const c of LISTS) for (const x of s[c] as unknown as Record<string, unknown>[]) out.set(`${c}/${idOf(c, x)}`, x);
   return out;
 }
+const split = (k: string) => [k.slice(0, k.indexOf("/")), k.slice(k.indexOf("/") + 1)] as const;
 
-// Dernier état connu de part et d'autre (pour n'envoyer que les différences).
-let shadow = new Map<string, string>();
-let shadowLoaded = false;
-async function loadShadow() {
-  if (shadowLoaded) return;
-  const raw = await idbGet<[string, string][]>("nuage_ombre");
-  shadow = new Map(raw ?? []);
-  shadowLoaded = true;
+/** Fusion à trois voies, champ par champ : ce que j'ai changé + ce que l'autre a changé.
+ *  Si nous avons changé le même champ, la version du serveur l'emporte (elle est arrivée la première). */
+export function merge3(base: Record<string, unknown> | null, mine: Record<string, unknown>, theirs: Record<string, unknown>) {
+  const out: Record<string, unknown> = { ...theirs };
+  const b = base ?? {};
+  for (const k of new Set([...Object.keys(mine), ...Object.keys(b)])) {
+    const mineChanged = canon(mine[k]) !== canon(b[k]);
+    const theirsChanged = canon(theirs[k]) !== canon(b[k]);
+    if (mineChanged && !theirsChanged) {
+      if (mine[k] === undefined) delete out[k];
+      else out[k] = mine[k];
+    }
+  }
+  return out;
 }
-const saveShadow = () => idbPut("nuage_ombre", [...shadow.entries()]);
+
+// ─── Dernier état connu du serveur, fiche par fiche (contenu + version) ───
+type Shadow = Map<string, { c: string; rev: number }>;
+let shadow: Shadow = new Map();
+let shadowFid = "";
+async function loadShadow(fid: string) {
+  if (shadowFid === fid) return;
+  const raw = await idbGet<[string, { c: string; rev: number }][]>(`ombre_${fid}`);
+  shadow = new Map(raw ?? []);
+  shadowFid = fid;
+}
+const saveShadow = () => idbPut(`ombre_${shadowFid}`, [...shadow.entries()]);
+const seqKey = (fid: string) => `nr_seq_${fid}`;
 
 // ─── État visible dans l'application ───
 export interface SyncStatus {
   on: boolean;
   busy: boolean;
+  live?: boolean;
   last?: number;
   error?: string;
   sending?: number;
+  refused?: number;
 }
 let status: SyncStatus = { on: false, busy: false };
 const listeners = new Set<() => void>();
@@ -112,92 +110,188 @@ export const subscribeSync = (l: () => void) => {
   return () => listeners.delete(l);
 };
 
+// ─── Les membres (comptes) de la famille ───
+export interface CloudMember {
+  user_id: string;
+  name: string;
+  role: "admin" | "editeur" | "lecteur";
+  status: "actif" | "en_attente";
+  person_id: string | null;
+  requested_person_id: string | null;
+  self_edited_at: string | null;
+  joined_at: string;
+  creator: boolean;
+  owner: boolean;
+}
+let members: CloudMember[] = [];
+export const getMembers = () => members;
+export const myMember = () => members.find((m) => m.user_id === myUid()) ?? null;
+const ROLE: Record<CloudMember["role"], Role> = { admin: "admin", editeur: "editeur", lecteur: "membre" };
+
+/** Les comptes de la famille deviennent les « utilisateurs » de l'application ; ce téléphone ouvre le mien. */
+export async function refreshMembers() {
+  const link = getLink();
+  if (!link) return;
+  members = await rpc<CloudMember[]>("nr_members", { fid: link.fid });
+  const active = members.filter((m) => m.status === "actif");
+  await applyRemote((s) => {
+    const old = new Map(s.users.map((u) => [u.id, u]));
+    s.users = active.map<User>((m) => ({
+      id: m.user_id,
+      name: m.name || old.get(m.user_id)?.name || "Membre",
+      role: ROLE[m.role],
+      personId: m.person_id ?? undefined,
+      creator: m.creator || undefined,
+      createdAt: Date.parse(m.joined_at) || Date.now(),
+    }));
+    const owner = members.find((m) => m.owner);
+    if (s.family && owner) s.family.ownerId = owner.user_id;
+    s.invites = [];
+    let sess = s.sessions.find((x) => x.userId === link.uid);
+    if (!sess) {
+      sess = { token: newId(24), userId: link.uid, createdAt: Date.now() };
+      s.sessions = [sess];
+    } else s.sessions = [sess];
+    kv.set("nr_session", sess.token);
+  });
+  listeners.forEach((l) => l());
+}
+
 // ─── Envoi ───
-async function push(link: CloudLink) {
-  const cur = records(read());
-  const changes: { coll: string; id: string; data?: unknown; deleted?: boolean }[] = [];
-  const newMedia: { id: string; mime: string }[] = [];
-  for (const [k, v] of cur) {
-    const c = canon(v);
-    if (shadow.get(k) === c) continue;
-    const [coll, id] = [k.slice(0, k.indexOf("/")), k.slice(k.indexOf("/") + 1)];
-    changes.push({ coll, id, data: JSON.parse(c) });
-    if (coll === "media" && !shadow.has(k)) newMedia.push({ id, mime: (v as { mime: string }).mime });
-  }
-  for (const k of shadow.keys()) if (!cur.has(k)) changes.push({ coll: k.slice(0, k.indexOf("/")), id: k.slice(k.indexOf("/") + 1), deleted: true });
-  if (!changes.length) return 0;
-  // Les photos et les voix d'abord, puis les fiches qui les citent.
-  let i = 0;
-  for (const m of newMedia) {
-    const b = mediaBlob(m.id);
-    setStatus({ sending: newMedia.length - i++ });
-    if (!b) continue;
-    await rpc("nr_put_media", { fid: link.fid, fkey: link.key, mid: m.id, mime: m.mime || b.type, b64: await toB64(b) });
-  }
-  setStatus({ sending: undefined });
-  for (let j = 0; j < changes.length; j += 400) {
-    const part = changes.slice(j, j + 400);
-    await rpc("nr_push", { fid: link.fid, fkey: link.key, changes: part });
-    for (const c of part) {
-      const k = `${c.coll}/${c.id}`;
-      if (c.deleted) shadow.delete(k);
-      else shadow.set(k, canon(c.data));
+async function push(fid: string): Promise<number> {
+  let sent = 0;
+  for (let round = 0; round < 4; round++) {
+    const cur = records(read());
+    const changes: { coll: string; id: string; data?: unknown; deleted?: boolean; base_rev?: number }[] = [];
+    const newMedia: string[] = [];
+    for (const [k, v] of cur) {
+      const c = canon(v);
+      const sh = shadow.get(k);
+      if (sh?.c === c) continue;
+      const [coll, id] = split(k);
+      changes.push({ coll, id, data: JSON.parse(c), base_rev: sh?.rev });
+      if (coll === "media" && !sh) newMedia.push(id);
     }
+    for (const [k, sh] of shadow) if (!cur.has(k) && sh.c !== "null" && !k.startsWith("_")) changes.push({ coll: split(k)[0], id: split(k)[1], deleted: true, base_rev: sh.rev });
+    if (!changes.length) return sent;
+
+    // Les photos, voix et vidéos d'abord, puis les fiches qui les citent.
+    let i = 0;
+    for (const mid of newMedia) {
+      const b = mediaBlob(mid);
+      setStatus({ sending: newMedia.length - i++ });
+      if (b) await uploadMedia(`${fid}/${mid}`, b);
+    }
+    setStatus({ sending: undefined });
+
+    let refused = 0;
+    const conflicts: { coll: string; id: string; rev: number; data: Record<string, unknown> | null; deleted: boolean }[] = [];
+    for (let j = 0; j < changes.length; j += 200) {
+      const part = changes.slice(j, j + 200);
+      const res = await rpc<{ ok: { coll: string; id: string; rev: number }[]; conflicts: typeof conflicts; denied: typeof conflicts }>("nr_write", { fid, changes: part });
+      for (const o of res.ok) {
+        const c = part.find((x) => x.coll === o.coll && x.id === o.id)!;
+        shadow.set(`${o.coll}/${o.id}`, { c: c.deleted ? "null" : canon(c.data), rev: o.rev });
+        sent++;
+      }
+      conflicts.push(...res.conflicts);
+      // Refusé par le serveur (rôle) : on remet la version de la famille.
+      if (res.denied.length) {
+        refused += res.denied.length;
+        await applyRemote((s) => {
+          for (const d of res.denied) {
+            setLocal(s, d.coll, d.id, d.deleted || !d.data ? null : d.data);
+            if (d.rev) shadow.set(`${d.coll}/${d.id}`, { c: d.deleted || !d.data ? "null" : canon(d.data), rev: d.rev });
+            else shadow.delete(`${d.coll}/${d.id}`);
+          }
+        });
+      }
+    }
+    if (refused) setStatus({ refused });
+    await saveShadow();
+    if (!conflicts.length) return sent;
+    // Quelqu'un d'autre a modifié les mêmes fiches : fusion, puis on renvoie au tour suivant.
+    await applyRemote((s) => {
+      for (const c of conflicts) {
+        const k = `${c.coll}/${c.id}`;
+        const base = shadow.get(k);
+        const mine = records(s).get(k) as Record<string, unknown> | undefined;
+        const theirs = c.deleted ? null : c.data;
+        if (theirs && mine) setLocal(s, c.coll, c.id, merge3(base && base.c !== "null" ? JSON.parse(base.c) : null, mine, theirs));
+        else if (theirs && !mine) setLocal(s, c.coll, c.id, theirs); // supprimée ici, modifiée ailleurs : on la garde
+        shadow.set(k, { c: theirs ? canon(theirs) : "null", rev: c.rev });
+      }
+    });
   }
-  await saveShadow();
-  return changes.length;
+  return sent;
+}
+
+function setLocal(s: Store, coll: string, id: string, data: Record<string, unknown> | null) {
+  if (coll === "family") {
+    if (data) s.family = { ...(data as unknown as Store["family"] & object), ownerId: s.family?.ownerId ?? (data.ownerId as string | undefined) } as Store["family"];
+  } else if (coll === "settings") {
+    if (data) s.settings = { ...s.settings, ...(data as object), translateKey: s.settings.translateKey } as Store["settings"];
+  } else if (coll === "translations") {
+    if (data) s.translations = data as Store["translations"];
+  } else if (isList(coll)) {
+    const list = s[coll] as unknown as Record<string, unknown>[];
+    const at = list.findIndex((x) => idOf(coll, x) === id);
+    if (!data) {
+      if (at >= 0) list.splice(at, 1);
+    } else if (at >= 0) list[at] = data;
+    else list.push(data);
+  }
 }
 
 // ─── Réception ───
-type Row = { coll: string; id: string; data: Record<string, unknown> | null; deleted: boolean; seq: number };
-async function pull(link: CloudLink) {
-  let since = Number(kv.get("nr_nuage_seq") ?? 0);
+type Row = { coll: string; id: string; data: Record<string, unknown> | null; deleted: boolean; rev: number; seq: number };
+async function pull(fid: string) {
+  let since = Number(kv.get(seqKey(fid)) ?? 0);
   let got = 0;
+  let membersChanged = false;
   for (;;) {
-    const rows = await rpc<Row[]>("nr_pull", { fid: link.fid, fkey: link.key, since });
+    const rows = await rpc<Row[]>("nr_pull", { fid, since });
     if (!rows?.length) break;
     got += rows.length;
     await applyRemote((s) => {
+      const mineNow = records(s);
       for (const r of rows) {
-        const coll = r.coll as Coll;
-        const k = `${coll}/${r.id}`;
-        if (r.deleted || !r.data) {
-          shadow.delete(k);
-          if (LISTS.includes(coll)) (s[coll] as unknown as Record<string, unknown>[]) = (s[coll] as unknown as Record<string, unknown>[]).filter((x) => idOf(coll, x) !== r.id);
+        if (r.coll.startsWith("_")) {
+          membersChanged = true;
           continue;
         }
-        shadow.set(k, canon(r.data));
-        if (coll === "family") s.family = r.data as unknown as Store["family"];
-        else if (coll === "settings") s.settings = { ...s.settings, ...(r.data as object), translateKey: s.settings.translateKey } as Store["settings"];
-        else if (coll === "translations") s.translations = r.data as Store["translations"];
-        else if (LISTS.includes(coll)) {
-          const list = s[coll] as unknown as Record<string, unknown>[];
-          const at = list.findIndex((x) => idOf(coll, x) === r.id);
-          if (at >= 0) list[at] = r.data;
-          else list.push(r.data);
-        }
+        const k = `${r.coll}/${r.id}`;
+        const sh = shadow.get(k);
+        if (sh && sh.rev >= r.rev) continue; // déjà connu (c'est peut-être mon propre envoi)
+        const theirs = r.deleted || !r.data ? null : r.data;
+        const local = mineNow.get(k) as Record<string, unknown> | undefined;
+        const localChanged = local !== undefined && canon(local) !== (sh?.c ?? "");
+        if (localChanged && theirs && local) setLocal(s, r.coll, r.id, merge3(sh && sh.c !== "null" ? JSON.parse(sh.c) : null, local, theirs));
+        else if (!(localChanged && !theirs)) setLocal(s, r.coll, r.id, theirs);
+        shadow.set(k, { c: theirs ? canon(theirs) : "null", rev: r.rev });
       }
     });
     since = rows[rows.length - 1].seq;
-    kv.set("nr_nuage_seq", String(since));
+    kv.set(seqKey(fid), String(since));
     if (rows.length < 5000) break;
   }
   if (got) await saveShadow();
+  if (membersChanged || !members.length) await refreshMembers();
   return got;
 }
 
-/** Télécharge les photos et voix qui manquent sur ce téléphone. */
+/** Télécharge les photos, voix et vidéos qui manquent sur ce téléphone. */
 let fetchingMedia = false;
-async function fetchMedia(link: CloudLink) {
+async function fetchMedia(fid: string) {
   if (fetchingMedia) return;
   fetchingMedia = true;
   try {
     for (const m of read().media) {
       if (mediaBlob(m.id)) continue;
-      const rows = await rpc<{ mime: string; b64: string }[]>("nr_get_media", { fid: link.fid, fkey: link.key, mid: m.id }).catch(() => []);
-      if (rows?.[0]) {
-        await putMedia(m.id, fromB64(rows[0].b64, rows[0].mime));
-        await applyRemote(() => undefined); // rafraîchit l'écran
+      const b = await downloadMedia(`${fid}/${m.id}`).catch(() => null);
+      if (b) {
+        await putMedia(m.id, b.type ? b : new Blob([b], { type: m.mime }));
+        refreshPages();
       }
     }
   } finally {
@@ -205,21 +299,37 @@ async function fetchMedia(link: CloudLink) {
   }
 }
 
-async function ping(link: CloudLink) {
+/** Portraits visibles par ceux qui scannent le QR code d'une fiche (même sans être de la famille). */
+async function publishPortraits(fid: string) {
+  const done = new Set((kv.get(`nr_portraits_${fid}`) ?? "").split(",").filter(Boolean));
+  const mids = [...new Set(read().persons.filter((p) => !p.placeholder).flatMap((p) => p.photoIds ?? (p.photoId ? [p.photoId] : [])))];
+  let changed = false;
+  for (const mid of mids) {
+    if (done.has(mid)) continue;
+    const b = mediaBlob(mid);
+    if (!b) continue;
+    await uploadMedia(`${fid}/${mid}`, b, "portraits");
+    done.add(mid);
+    changed = true;
+  }
+  if (changed) kv.set(`nr_portraits_${fid}`, [...done].join(","));
+}
+
+async function ping(fid: string) {
   const last = Number(kv.get("nr_nuage_ping") ?? 0);
   if (Date.now() - last < 3600_000) return;
   let did = kv.get("nr_appareil");
   if (!did) kv.set("nr_appareil", (did = newId(24)));
-  await rpc("nr_ping", { did, fid: link.fid, fkey: link.key, version: APP_VERSION }).catch(() => undefined);
+  await rpc("nr_ping", { did, fid, version: APP_VERSION }).catch(() => undefined);
   kv.set("nr_nuage_ping", String(Date.now()));
 }
 
 let running: Promise<void> | null = null;
 let again = false;
-/** Un tour de synchronisation : envoyer, recevoir, compléter les médias. */
+/** Un tour : recevoir, envoyer, recevoir, compléter les médias. */
 export function syncNow(): Promise<void> {
   const link = getLink();
-  if (!cloudAvailable || !link) {
+  if (!CLOUD || !link || !getSession()) {
     setStatus({ on: false });
     return Promise.resolve();
   }
@@ -230,181 +340,237 @@ export function syncNow(): Promise<void> {
   running = (async () => {
     setStatus({ on: true, busy: true });
     try {
-      await loadShadow();
-      // Premier tour sur ce téléphone : on reçoit d'abord, pour ne pas écraser le travail des autres.
-      if (Number(kv.get("nr_nuage_seq") ?? 0) === 0) await pull(link);
-      await push(link);
-      await pull(link);
-      await publishPortraits(link).catch(() => undefined);
+      await loadShadow(link.fid);
+      await pull(link.fid);
+      await push(link.fid);
+      await pull(link.fid);
       setStatus({ busy: false, last: Date.now(), error: undefined });
-      void fetchMedia(link);
-      void ping(link);
+      void fetchMedia(link.fid);
+      void publishPortraits(link.fid).catch(() => undefined);
+      void ping(link.fid);
     } catch (e) {
       const m = (e as Error).message;
-      setStatus({ busy: false, error: m === "NR_ACCES_REFUSE" ? "refus" : "reseau" });
+      setStatus({ busy: false, error: /rôle/.test(m) ? "refus" : "reseau" });
     } finally {
       running = null;
       if (again) {
         again = false;
-        setTimeout(() => void syncNow(), 500);
+        setTimeout(() => void syncNow(), 300);
       }
     }
   })();
   return running;
 }
 
-/** Démarre le partage : au lancement, à chaque changement, régulièrement, et au retour dans l'application. */
+// ─── Temps réel ───
+let channel: ReturnType<ReturnType<typeof supa>["channel"]> | null = null;
+let channelFid = "";
+function listen(fid: string) {
+  if (channelFid === fid && channel) return;
+  if (channel) void supa().removeChannel(channel);
+  channelFid = fid;
+  let t: ReturnType<typeof setTimeout> | undefined;
+  channel = supa()
+    .channel(`famille-${fid}`)
+    .on("postgres_changes", { event: "*", schema: "public", table: "nr_records", filter: `family_id=eq.${fid}` }, () => {
+      clearTimeout(t);
+      t = setTimeout(() => void syncNow(), 250);
+    })
+    .subscribe((st) => setStatus({ live: st === "SUBSCRIBED" }));
+}
+function stopListening() {
+  if (channel) void supa().removeChannel(channel);
+  channel = null;
+  channelFid = "";
+  setStatus({ live: false });
+}
+
+/** Démarre le partage : au lancement, à chaque changement, en temps réel, et au retour dans l'application. */
 let started = false;
 export function startSync() {
-  if (started) return;
+  if (started || !CLOUD) return;
   started = true;
   let t: ReturnType<typeof setTimeout> | undefined;
   onMutate(() => {
     clearTimeout(t);
-    t = setTimeout(() => void syncNow(), 2000);
+    t = setTimeout(() => void syncNow(), 800);
   });
-  setInterval(() => document.visibilityState === "visible" && void syncNow(), 45_000);
+  // Filet de sécurité si le temps réel est coupé (réseau mobile capricieux).
+  setInterval(() => document.visibilityState === "visible" && void syncNow(), 60_000);
   document.addEventListener("visibilitychange", () => document.visibilityState === "visible" && void syncNow());
   window.addEventListener("online", () => void syncNow());
-  setStatus({ on: !!getLink() && cloudAvailable });
-  void syncNow();
+  const l = getLink();
+  if (l && getSession()) {
+    listen(l.fid);
+    void syncNow();
+  }
 }
 
-/** Le fondateur ouvre l'espace en ligne de sa famille et y envoie tout. */
+// ─── Ouvrir une famille sur ce téléphone ───
+
+/** Relie ce téléphone (et ce compte) à une famille en ligne, puis reçoit tout l'arbre.
+ *  Si le téléphone avait une AUTRE famille, elle est d'abord mise de côté (sauvegarde). */
+export async function connectFamily(fid: string) {
+  const uid = myUid();
+  if (!uid) throw new Error("Connectez-vous d’abord à votre compte.");
+  const s = read();
+  if (s.family && s.family.id !== fid) {
+    await idbPut(`famille_avant_${s.family.id}`, JSON.parse(JSON.stringify(s)));
+    await replaceAll({ ...s, family: null, users: [], sessions: [], invites: [], persons: [], unions: [], parentages: [], stories: [], memories: [], capsules: [], media: [], tributes: [], quizScores: [], translations: {} });
+  }
+  setLink({ fid, uid });
+  await loadShadow(fid);
+  setStatus({ on: true, busy: true });
+  try {
+    await pull(fid);
+    await refreshMembers();
+    // Une famille déjà dans ce téléphone (même identifiant) : ce qui manque en ligne est envoyé,
+    // selon le rôle de chacun (le reste revient à la version de la famille).
+    await push(fid);
+    await pull(fid);
+    setStatus({ busy: false, last: Date.now(), error: undefined });
+  } catch (e) {
+    setStatus({ busy: false, error: "reseau" });
+    throw e;
+  }
+  listen(fid);
+  startSync();
+  void fetchMedia(fid);
+}
+
+/** Créer la famille en ligne : une nouvelle, ou celle qui était déjà dans ce téléphone (mise en ligne). */
 export async function enableSharing() {
-  if (!cloudAvailable) throw new Error("Le partage en direct n’est pas encore configuré dans cette version.");
-  const link = getLink() ?? { fid: newId(20), key: newId(32) };
-  await rpc("nr_create", { fid: link.fid, fkey: link.key });
-  setLink(link);
-  shadow = new Map();
-  shadowLoaded = true;
-  kv.set("nr_nuage_seq", "0");
-  await syncNow();
-  if (status.error) throw new Error("Pas de connexion pour le moment. Réessayez plus tard.");
+  if (!CLOUD) throw new Error("La base en ligne n’est pas encore configurée dans cette version.");
+  const s = read();
+  if (!s.family) throw new Error("Créez d’abord la famille.");
+  // Les anciens comptes de ce téléphone : chacun retrouvera sa fiche et son rôle en rejoignant.
+  const legacy = s.users.map((u) => ({ id: u.id, name: u.name, role: u.role, personId: u.personId }));
+  const meLocal = s.users.find((u) => u.id === s.sessions.find((x) => x.token === kv.get("nr_session"))?.userId);
+  try {
+    await rpc("nr_create_family", { fid: s.family.id, fname: s.family.name, legacy, me_person: meLocal?.personId ?? null });
+  } catch (e) {
+    if (/rôle/.test((e as Error).message)) throw new Error("Cette famille est déjà en ligne. Demandez à un administrateur le QR code « Rejoindre » pour y entrer avec votre compte.");
+    throw e;
+  }
+  await connectFamily(s.family.id);
 }
 
-/** Arrêter le partage sur CE téléphone (la famille reste en ligne pour les autres). */
+/** Quitter la famille en ligne sur CE téléphone (le compte reste membre). */
 export function leaveSharing() {
   setLink(null);
-  kv.del("nr_nuage_seq");
-  shadow = new Map();
-  void saveShadow();
+  stopListening();
+  members = [];
   setStatus({ on: false });
 }
 
-/** Un nouveau téléphone (QR code « Rejoindre ») reçoit toute la famille. */
-export async function joinCloud(link: CloudLink) {
-  if (!cloudAvailable) throw new Error("Le partage en direct n’est pas disponible dans cette version.");
-  setLink(link);
-  kv.set("nr_nuage_seq", "0");
-  shadow = new Map();
-  shadowLoaded = true;
-  try {
-    await pull(link);
-  } catch (e) {
-    setLink(null);
-    throw new Error((e as Error).message === "NR_ACCES_REFUSE" ? "Ce QR code n’est plus valable." : "Pas de connexion pour le moment. Réessayez plus tard.");
-  }
-  setStatus({ on: true, last: Date.now() });
-  void fetchMedia(link);
+/** Ce que le téléphone sait du compte avant même d'avoir ouvert une famille. */
+export interface MeInfo {
+  user: { id: string; display_name: string; creator: boolean };
+  families: { family_id: string; name: string; role: CloudMember["role"]; status: CloudMember["status"]; person_id: string | null; requested_person_id: string | null; owner: boolean }[];
 }
+export const fetchMe = () => rpc<MeInfo>("nr_me");
+
+/** Rejoindre avec un code d'invitation (QR code ou tapé). */
+export async function joinWithCode(code: string) {
+  const legacy = read().sessions.find((x) => x.token === kv.get("nr_session"))?.userId;
+  const r = await rpc<{ family_id: string }>("nr_join", { c: code, legacy_user: legacy ?? null });
+  await connectFamily(r.family_id);
+  return r.family_id;
+}
+
+/** Demander à rejoindre avec l'identifiant familial (un administrateur accepte). */
+export const requestJoin = (joinCode: string) => rpc<{ family_id: string; name: string }>("nr_request_join", { join_code: joinCode });
+
+// ─── Gestion de la famille (administrateurs) ───
+const fidOrThrow = () => {
+  const l = getLink();
+  if (!l) throw new Error("Ce téléphone n’est relié à aucune famille en ligne.");
+  return l.fid;
+};
+export const familyInfo = () => rpc<{ family_id: string; name: string; join_code: string | null }>("nr_family_info", { fid: fidOrThrow() });
+export interface CloudInvitation {
+  code: string;
+  role: "editeur" | "lecteur";
+  person_id: string | null;
+  label: string | null;
+  created_at: string;
+  expires_at: string | null;
+  max_uses: number | null;
+  uses: number;
+}
+export const createInvitation = (o: { role: "editeur" | "lecteur"; personId?: string; label?: string; days?: number }) =>
+  rpc<string>("nr_create_invitation", { fid: fidOrThrow(), role: o.role, person_id: o.personId ?? null, max_uses: null, days: o.days ?? 30, label: o.label ?? null });
+export const listInvitations = () => rpc<CloudInvitation[]>("nr_invitations_list", { fid: fidOrThrow() });
+export const revokeInvitation = (code: string) => rpc("nr_revoke_invitation", { c: code });
+export async function setMember(uid: string, p: { role?: CloudMember["role"]; personId?: string; accept?: boolean; clearPerson?: boolean }) {
+  await rpc("nr_set_member", { fid: fidOrThrow(), uid, role: p.role ?? null, person_id: p.personId ?? null, accept: p.accept ?? null, clear_person: p.clearPerson ?? false });
+  await refreshMembers();
+}
+export async function removeMember(uid: string) {
+  await rpc("nr_remove_member", { fid: fidOrThrow(), uid });
+  await refreshMembers();
+}
+/** « C'est moi dans l'arbre » (un administrateur valide). */
+export async function claimPerson(personId: string) {
+  await rpc("nr_claim_person", { fid: fidOrThrow(), pid: personId });
+  await refreshMembers();
+}
+export interface AuditEntry {
+  id: number;
+  at: string;
+  user_id: string | null;
+  user_name: string | null;
+  action: string;
+  coll: string | null;
+  record_id: string | null;
+  label: string | null;
+  fields: string[] | null;
+}
+export const history = (beforeId?: number) => rpc<AuditEntry[]>("nr_history", { fid: fidOrThrow(), before_id: beforeId ?? null, n: 60 });
 
 /** Statistiques du créateur (tous les téléphones). */
 export async function creatorStats(pin: string) {
-  if (!cloudAvailable) return null;
-  return rpc<{ families: number; devices: number; active1: number; active7: number; records: number; media: number; days: { day: string; phones: number }[]; adds: { day: string; n: number }[]; versions: Record<string, number> }>("nr_creator_stats", { pin });
+  if (!CLOUD) return null;
+  return rpc<{ families: number; users?: number; devices: number; active1: number; active7: number; records: number; media: number; days: { day: string; phones: number }[]; adds: { day: string; n: number }[]; versions: Record<string, number> }>("nr_creator_stats", { pin });
+}
+export const claimCreator = (pin: string) => rpc<boolean>("nr_claim_creator", { pin });
+
+// ─── Plus de code de reprise : on retrouve tout en se connectant à son compte ───
+export async function myRecoveryCode(_userId: string): Promise<string | null> {
+  return null;
+}
+export async function recoverWithCode(_raw: string): Promise<string> {
+  throw new Error("Connectez-vous avec votre e-mail et votre mot de passe : la famille revient toute seule.");
 }
 
-// ─── Petits outils ───
-async function toB64(b: Blob) {
-  const buf = new Uint8Array(await b.arrayBuffer());
-  let s = "";
-  for (let i = 0; i < buf.length; i += 0x8000) s += String.fromCharCode(...buf.subarray(i, i + 0x8000));
-  return btoa(s);
-}
-function fromB64(b64: string, type: string) {
-  const bin = atob(b64);
-  const u = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
-  return new Blob([u], { type });
-}
-
-// ─── Code de reprise personnel ───
-const ALPHA = "23456789ABCDEFGHJKMNPQRSTUVWXYZ";
-const pretty = (c: string) => c.match(/.{1,4}/g)!.join("-");
-
-/** Le code de reprise de la personne connectée (créé au besoin). Sans partage en direct : rien. */
-export async function myRecoveryCode(userId: string): Promise<string | null> {
-  const link = getLink();
-  if (!cloudAvailable || !link) return null;
-  const k = `nr_reprise_${userId}`;
-  let code = kv.get(k);
-  if (code) return pretty(code);
-  code = [...crypto.getRandomValues(new Uint8Array(16))].map((b) => ALPHA[b % ALPHA.length]).join("");
-  await rpc("nr_set_recovery", { fid: link.fid, fkey: link.key, code, uid: userId });
-  kv.set(k, code);
-  return pretty(code);
-}
-
-/** Nouveau téléphone ou réinstallation : le code ramène la famille et rouvre le compte de la personne. */
-export async function recoverWithCode(raw: string): Promise<string> {
-  if (!cloudAvailable) throw new Error("Le partage en direct n’est pas disponible dans cette version.");
-  const code = raw.toUpperCase().replace(/[^A-Z0-9]/g, "");
-  if (code.length < 16) throw new Error("Le code contient 16 caractères (4 groupes de 4).");
-  let rows: { fid: string; fkey: string; uid: string }[];
-  try {
-    rows = await rpc("nr_get_recovery", { code });
-  } catch {
-    throw new Error("Pas de connexion pour le moment. Réessayez plus tard.");
-  }
-  if (!rows?.[0]) throw new Error("Code inconnu. Vérifiez chaque caractère.");
-  await joinCloud({ fid: rows[0].fid, key: rows[0].fkey });
-  kv.set(`nr_reprise_${rows[0].uid}`, code);
-  return rows[0].uid;
-}
-
-// ─── Portraits visibles par tous (QR codes des fiches et de l'arbre) ───
-async function publishPortraits(link: CloudLink) {
-  const mids = [...new Set(read().persons.filter((p) => !p.placeholder).flatMap((p) => p.photoIds ?? (p.photoId ? [p.photoId] : [])))].sort();
-  const sig = mids.join(",");
-  if (kv.get("nr_portraits_publics") === sig) return;
-  await rpc("nr_set_public", { fid: link.fid, fkey: link.key, mids });
-  kv.set("nr_portraits_publics", sig);
-}
-
-/** Identifiant de la famille en ligne (pour que les QR codes montrent les portraits). */
-export const publicFamilyId = () => (cloudAvailable ? getLink()?.fid : undefined);
-
-/** Portrait d'un QR code : lisible par n'importe qui, sans la clé de la famille. */
+// ─── Portraits des QR codes ───
+export const publicFamilyId = () => (CLOUD ? getLink()?.fid : undefined);
 export async function fetchPublicPhoto(fid: string, mid: string): Promise<Blob | null> {
-  if (!cloudAvailable) return null;
+  if (!CLOUD) return null;
   try {
-    const rows = await rpc<{ mime: string; b64: string }[]>("nr_public_media", { fid, mid });
-    return rows?.[0] ? fromB64(rows[0].b64, rows[0].mime) : null;
+    const r = await fetch(publicPortraitUrl(fid, mid));
+    return r.ok ? await r.blob() : null;
   } catch {
     return null;
   }
 }
 
 // ─── Gardien des coffres du futur ───
-/** Confie la clé d'un coffre au gardien en ligne (il ne la rendra qu'à la date d'ouverture). */
 export async function coffrePublishKey(cid: string, ckey: string, code: string, openAt: string): Promise<boolean> {
   const link = getLink();
-  if (!cloudAvailable || !link) return false;
-  await rpc("nr_coffre_put", { fid: link.fid, fkey: link.key, cid, open_at: openAt, ckey, code });
+  if (!CLOUD || !link) return false;
+  await rpc("nr_coffre_put", { fid: link.fid, cid, open_at: openAt, ckey, code });
   return true;
 }
-/** L'auteur retrouve la clé de son coffre (nouveau téléphone) avec son code. */
 export async function coffreAuthorKey(cid: string, code: string): Promise<string | null> {
   const link = getLink();
-  if (!cloudAvailable || !link) return null;
-  const rows = await rpc<{ ckey: string }[]>("nr_coffre_author", { fid: link.fid, fkey: link.key, cid, code }).catch(() => []);
+  if (!CLOUD || !link) return null;
+  const rows = await rpc<{ ckey: string }[]>("nr_coffre_author", { fid: link.fid, cid, code }).catch(() => []);
   return rows?.[0]?.ckey ?? null;
 }
-/** Le jour venu (heure du serveur), le gardien rend la clé et le code aux bénéficiaires. */
 export async function coffreReleasedKey(cid: string): Promise<{ key: string; code: string } | null> {
   const link = getLink();
-  if (!cloudAvailable || !link) return null;
-  const rows = await rpc<{ ckey: string; code: string }[]>("nr_coffre_get", { fid: link.fid, fkey: link.key, cid });
+  if (!CLOUD || !link) return null;
+  const rows = await rpc<{ ckey: string; code: string }[]>("nr_coffre_get", { fid: link.fid, cid });
   return rows?.[0] ? { key: rows[0].ckey, code: rows[0].code } : null;
 }

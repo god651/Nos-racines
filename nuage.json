@@ -1,5 +1,5 @@
 {
-  "_explication": "Espace en ligne du partage en direct (Supabase). La clé « anon » est publique par nature : sans la clé secrète d'une famille, elle ne donne accès à rien.",
+  "_explication": "Base centrale de la famille (Supabase) : adresse du projet (Project URL) et clé publique « anon ». La clé anon ne donne accès à rien sans un compte membre de la famille : toutes les règles sont vérifiées par le serveur (supabase/partage.sql).",
   "url": "",
   "key": ""
 }

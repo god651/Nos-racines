@@ -22,6 +22,8 @@ export default async function ParametresPage() {
     <SettingsView
       d={{
         isAdmin: viewer.isAdmin,
+        canEdit: viewer.canEdit,
+        role: viewer.role,
         meId: viewer.user!.id,
         family: { name: family.name, village: family.village, motto: family.motto, since: family.since, introPhotoId: family.introPhotoId, introCaption: family.introCaption },
         covers: family.covers.filter((id) => s.media.some((m) => m.id === id)),

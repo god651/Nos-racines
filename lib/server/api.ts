@@ -20,6 +20,14 @@ export function needAdmin(req: NextRequest) {
   return { v, err: null };
 }
 
+/** Garde : administrateurs et éditeurs modifient l'arbre. */
+export function needEditor(req: NextRequest) {
+  const v = viewerOf(req);
+  if (!v.user) return { v, err: fail("Rejoignez d’abord la famille avec un QR code d’invitation.", 401) };
+  if (!v.canEdit) return { v, err: fail("Seuls les administrateurs et les éditeurs peuvent modifier l’arbre.", 403) };
+  return { v, err: null };
+}
+
 export function needMember(req: NextRequest) {
   const v = viewerOf(req);
   if (!v.user) return { v, err: fail("Rejoignez d’abord la famille avec un QR code d’invitation.", 401) };

@@ -1,12 +1,12 @@
 import type { NextRequest } from "next/server";
-import { body, fail, needAdmin, ok, txt } from "@/lib/server/api";
+import { body, fail, needEditor, ok, txt } from "@/lib/server/api";
 import { addRelative, KinError, RELATION_SEX, RELATIONS, type Relation } from "@/lib/server/kinship";
 import { applyPerson, applyRelations } from "@/lib/server/persons";
 import { mutate, newId, read, shortCode } from "@/lib/server/store";
 import type { Person } from "@/lib/types";
 
 export async function POST(req: NextRequest) {
-  const { v, err } = needAdmin(req);
+  const { v, err } = needEditor(req);
   if (err) return err;
   const b = await body(req);
   if (typeof b.givenName !== "string" || !b.givenName.trim()) return fail("Le prénom est obligatoire.");

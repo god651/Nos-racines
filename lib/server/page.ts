@@ -14,6 +14,12 @@ export async function requireMember() {
   return { s, family: s.family!, viewer, t, lang };
 }
 
+export async function requireEditor() {
+  const ctx = await requireMember();
+  if (!ctx.viewer.canEdit) redirect("/accueil");
+  return ctx;
+}
+
 export async function requireAdmin() {
   const ctx = await requireMember();
   if (!ctx.viewer.isAdmin) redirect("/accueil");

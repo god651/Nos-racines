@@ -1,12 +1,12 @@
 import { PersonForm } from "@/components/forms/PersonForm";
 import { personOptions } from "@/lib/server/forms";
 import { kinChoices, RELATIONS, type Relation } from "@/lib/server/kinship";
-import { requireAdmin } from "@/lib/server/page";
+import { requireEditor } from "@/lib/server/page";
 
 // Ajout d'une personne. Raccourcis depuis une fiche : ?parent=… (ajouter un enfant), ?conjoint=…, ?enfant=… (ajouter un parent).
 
 export default async function NouvellePersonne({ searchParams }: { searchParams: Promise<Record<string, string | undefined>> }) {
-  const { s, family } = await requireAdmin();
+  const { s, family } = await requireEditor();
   const q = await searchParams;
   const exists = (id?: string) => (id && s.persons.some((p) => p.id === id) ? id : undefined);
   const parent = exists(q.parent);

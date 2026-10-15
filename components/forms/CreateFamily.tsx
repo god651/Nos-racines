@@ -1,6 +1,5 @@
 "use client";
 
-import { RecoverEntry } from "./RecoverEntry";
 import { motion } from "framer-motion";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
@@ -8,6 +7,9 @@ import { Dust, Grain, Vignette } from "@/components/ambiance";
 import { ErrorNote, Field, GhostButton, PrimaryButton, Toggle } from "@/components/ui";
 import { api } from "@/lib/client";
 import { importFamily } from "@/lib/local/backup";
+import { findPhoneBackup } from "@/lib/local/backup-finder";
+import { cloudAvailable, enableSharing } from "@/lib/local/sync";
+import { askConfirm } from "@/components/Confirm";
 import { decorateDemo } from "@/lib/local/demo";
 import { useT } from "@/lib/i18n/client";
 import { sound } from "@/lib/sound";
@@ -27,6 +29,8 @@ export function CreateFamily() {
     setError(null);
     try {
       await api("/api/famille", "POST", { ...f, addSelf });
+      // Famille en ligne : elle est aussitôt créée dans la base centrale (vous en êtes l'administrateur principal).
+      if (cloudAvailable) await enableSharing();
       sound.play("success");
       router.replace("/accueil");
       router.refresh();
@@ -61,7 +65,7 @@ export function CreateFamily() {
         <p className="font-serif text-sm tracking-[5px] text-or">NOS RACINES</p>
         <h1 className="mt-4 font-serif text-[34px] font-light leading-tight">{t("Plantons votre arbre")}</h1>
         <p className="mt-2 text-[15px] leading-relaxed text-or-pale">
-          {t("Tout reste dans ce téléphone. Vous serez le premier administrateur.")}
+          {cloudAvailable ? t("Un seul arbre pour toute la famille, en ligne : chaque membre voit et complète le même. Vous serez l’administrateur principal.") : t("Tout reste dans ce téléphone. Vous serez le premier administrateur.")}
         </p>
       </motion.div>
 
@@ -104,10 +108,14 @@ export function CreateFamily() {
       </motion.form>
 
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.6 }} className="relative mt-6 text-center">
-        <p className="mb-3 text-sm text-or-pale">{t("Vous voulez d’abord découvrir l’application ?")}</p>
-        <GhostButton onClick={demo} disabled={!!busy} className="mx-auto border-or-pale/50 text-or-pale">
-          {busy === "demo" ? "…" : t("Explorer avec une famille d’exemple")}
-        </GhostButton>
+        {!cloudAvailable && (
+          <>
+            <p className="mb-3 text-sm text-or-pale">{t("Vous voulez d’abord découvrir l’application ?")}</p>
+            <GhostButton onClick={demo} disabled={!!busy} className="mx-auto border-or-pale/50 text-or-pale">
+              {busy === "demo" ? "…" : t("Explorer avec une famille d’exemple")}
+            </GhostButton>
+          </>
+        )}
         <input
           ref={restoreInput}
           type="file"
@@ -120,6 +128,7 @@ export function CreateFamily() {
             setError(null);
             try {
               await importFamily(file);
+              if (cloudAvailable) await enableSharing().catch(() => undefined);
               router.replace("/accueil");
             } catch (err) {
               setError((err as Error).message);
@@ -127,11 +136,32 @@ export function CreateFamily() {
             }
           }}
         />
-        <button type="button" onClick={() => restoreInput.current?.click()} disabled={!!busy} className="mt-4 text-[13px] text-or-pale/80 underline underline-offset-4">
+        <button
+          type="button"
+          onClick={async () => {
+            // On cherche d'abord la sauvegarde du téléphone (Documents › NosRacines) ; sinon, le sélecteur de fichiers.
+            const found = await findPhoneBackup();
+            if (found && (await askConfirm(t("Sauvegarde trouvée : {nom}, du {date}. La restaurer ?", { nom: found.familyName, date: new Date(found.date).toLocaleDateString() })))) {
+              setBusy("demo");
+              setError(null);
+              try {
+                await importFamily(found.file);
+                if (cloudAvailable) await enableSharing().catch(() => undefined);
+                router.replace("/accueil");
+              } catch (err) {
+                setError((err as Error).message);
+                setBusy(null);
+              }
+              return;
+            }
+            restoreInput.current?.click();
+          }}
+          disabled={!!busy}
+          className="mt-4 text-[13px] text-or-pale/80 underline underline-offset-4"
+        >
           {t("Restaurer une sauvegarde")}
         </button>
         <p className="mx-auto mt-1 max-w-[300px] text-[11px] leading-snug text-or-pale/55">{t("Le fichier se trouve dans Documents › NosRacines du téléphone, ou là où vous l’avez envoyé.")}</p>
-        <RecoverEntry />
       </motion.div>
     </main>
   );

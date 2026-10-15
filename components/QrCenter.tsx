@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { api } from "@/lib/client";
 import { embedded } from "@/lib/local/env";
+import Link from "next/link";
+import { getLink } from "@/lib/local/sync";
 import { isNative } from "@/lib/native";
 import { useT } from "@/lib/i18n/client";
 import { askConfirm } from "@/components/Confirm";
@@ -103,7 +105,15 @@ export function QrCenter({ familyName, isAdmin, tree, invites, persons, local }:
             </section>
           )}
 
-          {tab === "inviter" && isAdmin && (
+          {tab === "inviter" && isAdmin && getLink() && (
+            <section className="rounded-[20px] bg-kapok p-4 text-center">
+              <p className="text-sm leading-relaxed text-[#4A463C]">{t("La famille est en ligne : chaque proche crée son compte puis scanne un QR code d’invitation. Choisissez son rôle (lecteur ou éditeur) et, si vous voulez, sa fiche dans l’arbre.")}</p>
+              <Link href="/parametres" className="mt-3 inline-flex min-h-12 items-center rounded-full bg-or px-6 text-[14px] font-semibold text-nuit">
+                {t("Créer une invitation")}
+              </Link>
+            </section>
+          )}
+          {tab === "inviter" && isAdmin && !getLink() && (
             <section>
               <p className="mb-4 text-sm leading-relaxed text-[#4A463C] print:hidden">
                 {t("Votre proche installe l’application Nos Racines, touche « Scanner » et vise ce QR code : il rejoint la famille et peut tout voir, sans rien modifier. Ce code ne s’ouvre qu’avec le scanner de l’application. Vous pourrez ensuite le nommer administrateur dans les paramètres (3 au maximum).")}

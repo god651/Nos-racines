@@ -27,7 +27,7 @@ export default async function CartePage() {
       familyVillage={family.village || undefined}
       familyOrigin={findPlace(family.village, custom)}
       members={members}
-      isAdmin={viewer.isAdmin}
+      isAdmin={viewer.canEdit}
     />
   );
 }

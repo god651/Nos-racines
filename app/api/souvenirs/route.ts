@@ -1,9 +1,9 @@
 import type { NextRequest } from "next/server";
-import { body, fail, int, needAdmin, ok, txt } from "@/lib/server/api";
+import { body, fail, int, needEditor, ok, txt } from "@/lib/server/api";
 import { mutate, newId, read } from "@/lib/server/store";
 
 export async function POST(req: NextRequest) {
-  const { v, err } = needAdmin(req);
+  const { v, err } = needEditor(req);
   if (err) return err;
   const b = await body(req);
   const s = read();

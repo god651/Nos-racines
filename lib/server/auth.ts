@@ -15,7 +15,8 @@ export function viewerFromToken(s: Store, token?: string): Viewer {
   const sess = token ? s.sessions.find((x) => x.token === token) : undefined;
   const user = sess ? s.users.find((u) => u.id === sess.userId) ?? null : null;
   const isOwner = !!user && ownerIdOf(s) === user.id;
-  return { user, role: isOwner ? "admin" : user?.role ?? null, isAdmin: isOwner || user?.role === "admin", isOwner, isCreator: !!user?.creator && creatorDevice() };
+  const isAdmin = isOwner || user?.role === "admin";
+  return { user, role: isOwner ? "admin" : user?.role ?? null, isAdmin, canEdit: isAdmin || user?.role === "editeur", isOwner, isCreator: !!user?.creator && creatorDevice() };
 }
 
 export function sessionCookie(token: string) {

@@ -149,11 +149,12 @@ export function EmptyState({ title, text, action, dark = false }: { title: strin
   );
 }
 
-export function RoleBadge({ admin }: { admin: boolean }) {
+export function RoleBadge({ admin, role }: { admin: boolean; role?: string | null }) {
   const t = useT();
+  const editor = !admin && role === "editeur";
   return (
-    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ${admin ? "bg-or text-nuit" : "bg-kapok text-foret"}`}>
-      {admin ? t("Administrateur") : t("Membre · lecture seule")}
+    <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[11px] font-semibold ${admin ? "bg-or text-nuit" : editor ? "bg-foret text-coton" : "bg-kapok text-foret"}`}>
+      {admin ? t("Administrateur") : editor ? t("Éditeur") : t("Lecteur")}
     </span>
   );
 }

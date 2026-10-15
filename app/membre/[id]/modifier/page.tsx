@@ -9,7 +9,7 @@ export default async function ModifierPersonne({ params }: { params: Promise<{ i
   const person = s.persons.find((p) => p.id === id);
   if (!person) notFound();
   // Un membre ne modifie que sa propre fiche, et une seule fois.
-  const selfOnce = !viewer.isAdmin;
+  const selfOnce = !viewer.canEdit;
   if (selfOnce && (viewer.user?.personId !== id || person.selfEditedAt)) redirect(`/membre/${id}`);
   return <PersonForm person={person} options={personOptions(s)} initial={relationsOf(s, id)} backHref={`/membre/${id}`} selfOnce={selfOnce} />;
 }

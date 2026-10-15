@@ -26,5 +26,8 @@ export async function POST(req: NextRequest) {
   });
   kv.set("nr_createur", "1");
   kv.set("nr_createur_pin", code);
+  // Famille en ligne : le serveur retient aussi que ce compte est celui du créateur.
+  const { getLink, claimCreator, refreshMembers } = await import("@/lib/local/sync");
+  if (getLink()) await claimCreator(code).then(() => refreshMembers()).catch(() => undefined);
   return ok();
 }

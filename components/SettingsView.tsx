@@ -24,9 +24,12 @@ import { askConfirm } from "@/components/Confirm";
 import { sound } from "@/lib/sound";
 import type { Lang, Role, Visibility } from "@/lib/types";
 import { Card, ErrorNote, Field, GhostButton, PageHeader, PrimaryButton, RoleBadge, Select, Toggle } from "./ui";
+import { CloudAccountCard, CloudHistoryCard, CloudMembersCard } from "./account/CloudSettings";
 
 export interface SettingsData {
   isAdmin: boolean;
+  canEdit?: boolean;
+  role?: Role | null;
   meId: string;
   family: { name: string; village: string; motto: string; since?: number; introPhotoId?: string; introCaption?: string };
   covers: string[];
@@ -44,13 +47,15 @@ export interface SettingsData {
 
 export function SettingsView({ d }: { d: SettingsData }) {
   const t = useT();
+  // Famille en ligne : comptes personnels, membres et rôles, historique.
+  const online = !!getLink();
   const SECTIONS = [
+    ...(online ? [{ id: "compte", label: t("Mon compte") }, { id: "membres", label: t("Membres") }, ...(d.isAdmin ? [{ id: "inviter", label: t("Inviter") }] : []), ...(d.canEdit ? [{ id: "historique", label: t("Historique") }] : [])] : []),
     ...(d.isAdmin ? [{ id: "famille", label: t("Famille") }, { id: "couverture", label: t("Photos de couverture") }, { id: "generique", label: t("Générique") }] : []),
     { id: "langue", label: t("Langue") },
     { id: "son", label: t("Son") },
     { id: "internet", label: t("Internet") },
-    { id: "partage", label: t("Partage") },
-    { id: "comptes", label: t("Administrateurs") },
+    ...(online ? [] : [{ id: "partage", label: t("Partage") }, { id: "comptes", label: t("Administrateurs") }]),
     { id: "sauvegarde", label: t("Sauvegarde") },
     ...(d.isAdmin ? [{ id: "confidentialite", label: t("Confidentialité") }] : []),
     { id: "apropos", label: t("À propos") },
@@ -68,17 +73,22 @@ export function SettingsView({ d }: { d: SettingsData }) {
       <div className="space-y-4 px-5 pt-4">
         {!d.isAdmin && (
           <p className="rounded-[16px] bg-kapok px-4 py-3 text-[13px] leading-relaxed text-foret">
-            {t("Vous êtes membre : vous voyez tout, mais seuls les administrateurs (3 au maximum) peuvent modifier la famille.")}
+            {d.canEdit
+              ? t("Vous êtes éditeur : vous modifiez l’arbre, les récits et les souvenirs. Les rôles et les invitations restent aux administrateurs.")
+              : t("Vous êtes lecteur : vous voyez tout, allumez des bougies, laissez des mots et complétez votre fiche une fois. Les administrateurs et les éditeurs modifient l’arbre.")}
           </p>
         )}
+        {online && <CloudAccountCard />}
+        {online && <CloudMembersCard persons={d.persons} />}
+        {online && d.canEdit && <CloudHistoryCard />}
         {d.isAdmin && <FamilySection d={d} />}
         {d.isAdmin && <CoverSection d={d} />}
         {d.isAdmin && <IntroSection d={d} />}
         <LanguageSection d={d} />
         <SoundSection />
         <InternetSection d={d} />
-        <SharingSection d={d} />
-        <AccountsSection d={d} />
+        {!online && <SharingSection d={d} />}
+        {!online && <AccountsSection d={d} />}
         {d.isAdmin && <PrivacySection d={d} />}
         <BackupSection d={d} />
         <AboutSection d={d} />
@@ -497,7 +507,7 @@ function AccountsSection({ d }: { d: SettingsData }) {
                     {[u.personName && t("Dans l’arbre : {nom}", { nom: u.personName }), !u.connected && t("Pas encore connecté")].filter(Boolean).join(" · ")}
                   </span>
                 </span>
-                {u.isCreator ? <span className="rounded-full bg-nuit px-2.5 py-1 text-[11px] font-semibold text-or">{t("Fondateur")}</span> : u.isOwner ? <span className="rounded-full border border-nuit px-2.5 py-1 text-[11px] font-semibold text-nuit">{t("Administrateur principal")}</span> : <RoleBadge admin={u.role === "admin"} />}
+                {u.isCreator ? <span className="rounded-full bg-nuit px-2.5 py-1 text-[11px] font-semibold text-or">{t("Fondateur")}</span> : u.isOwner ? <span className="rounded-full border border-nuit px-2.5 py-1 text-[11px] font-semibold text-nuit">{t("Administrateur principal")}</span> : <RoleBadge admin={u.role === "admin"} role={u.role} />}
               </div>
               {(u.code || shown === u.id) && d.isAdmin && <AccessCode userId={u.id} code={u.code} name={u.name} open={shown === u.id} onToggle={() => setShown(shown === u.id ? null : u.id)} />}
               {d.isAdmin && !u.isOwner && (
@@ -647,7 +657,7 @@ function BackupSection({ d }: { d: SettingsData }) {
   return (
     <div id="sauvegarde" className="scroll-mt-16 space-y-4">
       <AutoBackupCard meId={d.meId} />
-      {d.isAdmin && <Card title={t("Tout effacer")} className="border-terre/30">
+      {d.isAdmin && !getLink() && <Card title={t("Tout effacer")} className="border-terre/30">
         {!open ? (
           <button onClick={() => setOpen(true)} className="text-[13px] text-terre underline">{t("Réinitialiser l’application…")}</button>
         ) : (

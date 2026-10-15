@@ -10,9 +10,10 @@ import { createRoot } from "react-dom/client";
 import { initStore } from "@/lib/local/store-core";
 import { startBackgroundGuard } from "@/lib/background";
 import { startPwa } from "@/lib/pwa";
+import { initCloud } from "@/lib/cloud";
 import { App } from "./App";
 
 const root = createRoot(document.getElementById("root")!);
 startBackgroundGuard();
 startPwa();
-void initStore().then(() => root.render(<App />));
+void Promise.all([initStore(), initCloud()]).then(() => root.render(<App />));

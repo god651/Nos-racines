@@ -24,7 +24,7 @@ export default async function AccueilPage() {
         covers: family.covers.filter((id) => s.media.some((m) => m.id === id)),
         stats: { members: st.members, generations: st.generations, memories: st.memories, voiceValue: voice.value, voiceUnit: voice.unit },
         userName: me?.givenName ?? viewer.user!.name,
-        isAdmin: viewer.isAdmin,
+        isAdmin: viewer.canEdit,
         invited: s.users.length > 1 || s.invites.some((i) => !i.forUserId),
         featured: story
           ? { title: story.title, personName: teller ? fullName(teller) : "", personId: story.personId, audioId: story.audioId, photoId: teller?.photoId, minutes: Math.max(1, Math.round(story.durationSec / 60)) }

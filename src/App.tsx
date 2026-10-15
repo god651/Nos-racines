@@ -30,6 +30,7 @@ import Griot from "@/app/griot/page";
 import Membre from "@/app/membre/[id]/page";
 import Modifier from "@/app/membre/[id]/modifier/page";
 import Moi from "@/app/moi/page";
+import MoiQui from "@/app/moi/qui/page";
 import Quiz from "@/app/quiz/page";
 import Memorial from "@/app/memorial/[id]/page";
 import Parametres from "@/app/parametres/page";
@@ -43,7 +44,11 @@ import Carte from "@/app/carte/page";
 import Fondateur from "@/app/fondateur/page";
 import { ScanHost } from "@/components/Scanner";
 import { logOpen } from "@/lib/activity";
-import { startSync } from "@/lib/local/sync";
+import { getLink, getSyncStatus, startSync, subscribeSync } from "@/lib/local/sync";
+import { cloudAvailable, getSession, subscribeSession } from "@/lib/cloud";
+import { AccountScreen } from "@/components/account/AccountScreen";
+import { FamilyStart } from "@/components/account/FamilyStart";
+import { IdentifyHost } from "@/components/account/IdentifyHost";
 import { startAutosave } from "@/lib/local/autosave";
 import { SaveHost } from "@/components/SaveHost";
 import { CoffreHost } from "@/components/coffre/CoffreHost";
@@ -65,6 +70,7 @@ const ROUTES: [string, PageFn][] = [
   ["/membre/:id", Membre as unknown as PageFn],
   ["/membre/:id/modifier", Modifier as unknown as PageFn],
   ["/moi", Moi as unknown as PageFn],
+  ["/moi/qui", MoiQui as unknown as PageFn],
   ["/quiz", Quiz as unknown as PageFn],
   ["/memorial/:id", Memorial as unknown as PageFn],
   ["/parametres", Parametres as unknown as PageFn],
@@ -118,6 +124,16 @@ export function App() {
   const dataV = useSyncExternalStore(subscribeData, getDataVersion);
   useSyncExternalStore(subscribeRoute, getRouteVersion);
   const route = getRoute();
+  // Famille en ligne : il faut un compte, puis une famille. Les pages publiques (QR codes) restent ouvertes à tous.
+  const session = useSyncExternalStore(subscribeSession, getSession);
+  useSyncExternalStore(subscribeSync, getSyncStatus);
+  const joinToken = route.path.startsWith("/rejoindre/") ? decodeURIComponent(route.path.slice(11)) : "";
+  if (cloudAvailable && joinToken && kv.get("nr_invitation") !== joinToken.split("@")[0]) kv.set("nr_invitation", joinToken.split("@")[0]);
+  const publicPage = route.path === "/" || route.path === "/voir" || route.path.startsWith("/famille/") || route.path.startsWith("/q/");
+  const gate: "compte" | "famille" | null = !cloudAvailable || publicPage ? null : !session ? "compte" : !getLink() || joinToken ? (route.path === "/creer" ? null : "famille") : null;
+  useEffect(() => {
+    if (session) startSync();
+  }, [session]);
   const c = kv.get("nr_langue");
   const lang = isLang(c) ? c : read().settings.language ?? "fr";
   // Nouvelle copie à chaque changement : une langue traduite s'affiche aussitôt.
@@ -129,7 +145,7 @@ export function App() {
   // Visite guidée : à la première arrivée d'un compte sur l'accueil.
   const [guideTick, setGuideTick] = useState(0);
   const viewer = viewerFromToken(read(), kv.get("nr_session"));
-  const showGuide = route.path === "/accueil" && !!viewer.user && !guideSeen(viewer.user.id) && !intro && !legacy;
+  const showGuide = route.path === "/accueil" && !!viewer.user && !guideSeen(viewer.user.id) && !intro && !legacy && !gate;
   void guideTick;
 
   // Au premier lancement, une famille existe déjà : on va directement à l'accueil.
@@ -140,13 +156,14 @@ export function App() {
   return (
     <I18nProvider lang={lang} dict={dict}>
       <div className="mx-auto min-h-dvh w-full max-w-[440px] overflow-x-clip bg-coton shadow-[0_0_80px_rgba(0,0,0,0.5)]">
-        {route.path === "/" ? <Onboarding /> : <PageHost path={route.path} query={route.query} dataV={dataV} />}
+        {gate === "compte" ? <AccountScreen /> : gate === "famille" ? <FamilyStart key={joinToken || "famille"} /> : route.path === "/" ? <Onboarding /> : <PageHost path={route.path} query={route.query} dataV={dataV} />}
       </div>
       {!persistent && !isNative && <DemoNotice />}
       <UpdateHost blocked={intro || showGuide || !!legacy} />
       <PwaHost blocked={intro || showGuide || !!legacy} />
-      <CoffreHost me={viewer.user} blocked={intro || showGuide || !!legacy || route.path === "/"} />
-      <SaveHost blocked={intro || showGuide || !!legacy || route.path === "/" || !viewer.user} />
+      <CoffreHost me={viewer.user} blocked={intro || showGuide || !!legacy || route.path === "/" || !!gate} />
+      {cloudAvailable && !gate && !intro && !showGuide && viewer.user && <IdentifyHost path={route.path} />}
+      <SaveHost blocked={intro || showGuide || !!legacy || route.path === "/" || !viewer.user || !!gate} />
       <ConfirmHost />
       <CropHost />
       <ScanHost />

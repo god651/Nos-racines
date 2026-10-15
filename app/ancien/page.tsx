@@ -17,7 +17,7 @@ export default async function AncienPage({ searchParams }: { searchParams: Promi
     });
   return (
     <AncienView
-      isAdmin={viewer.isAdmin}
+      isAdmin={viewer.canEdit}
       options={[...personOptions(s)].sort((a, b) => Number(!s.persons.find((p) => p.id === a.id)?.isLiving) - Number(!s.persons.find((p) => p.id === b.id)?.isLiving))}
       tellerId={teller?.id}
       stories={stories}

@@ -2,7 +2,7 @@
 // Une personne n'est pas un compte : l'arbre contient des personnes (vivantes ou disparues),
 // et seuls certains appareils sont liés à un utilisateur (administrateur ou membre).
 
-export type Role = "admin" | "membre";
+export type Role = "admin" | "editeur" | "membre";
 export type Visibility = "public" | "famille";
 export type ParentageKind = "biological" | "adoptive" | "fostered" | "guardianship";
 export type UnionKind = "civil" | "customary" | "religious";
@@ -245,6 +245,8 @@ export interface Viewer {
   user: User | null;
   role: Role | null;
   isAdmin: boolean;
+  /** Peut modifier l'arbre (administrateur ou éditeur). */
+  canEdit: boolean;
   isOwner: boolean;
   /** Le créateur de l'application : titre « Fondateur » et espace du fondateur. */
   isCreator: boolean;

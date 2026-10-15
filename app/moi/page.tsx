@@ -18,6 +18,7 @@ export default async function MoiPage() {
         id: u.id,
         name: u.name,
         isAdmin: viewer.isAdmin,
+        role: viewer.role,
         since: u.createdAt,
         familyName: family.name,
         lang,

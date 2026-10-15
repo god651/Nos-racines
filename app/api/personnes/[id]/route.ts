@@ -1,5 +1,5 @@
 import type { NextRequest } from "next/server";
-import { body, fail, needAdmin, needMember, ok } from "@/lib/server/api";
+import { body, fail, needEditor, needMember, ok } from "@/lib/server/api";
 import { applyPerson, applyRelations } from "@/lib/server/persons";
 import { mutate, read } from "@/lib/server/store";
 
@@ -10,7 +10,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const cur = read().persons.find((p) => p.id === id);
   if (!cur) return fail("Personne introuvable", 404);
   const b = await body(req);
-  if (!v.isAdmin) {
+  if (!v.canEdit) {
     // Un membre peut compléter SA fiche une seule fois ; ensuite, seuls les administrateurs la modifient.
     if (v.user!.personId !== id) return fail("Action réservée aux administrateurs.", 403);
     if (cur.selfEditedAt) return fail("Vous avez déjà complété votre fiche. Pour la changer encore, demandez à un administrateur.", 403);
@@ -33,7 +33,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { err } = needAdmin(req);
+  const { err } = needEditor(req);
   if (err) return err;
   const { id } = await params;
   await mutate((s) => {

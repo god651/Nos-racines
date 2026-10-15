@@ -1,9 +1,9 @@
 import type { NextRequest } from "next/server";
-import { body, needAdmin, ok, txt } from "@/lib/server/api";
+import { body, needEditor, ok, txt } from "@/lib/server/api";
 import { mutate } from "@/lib/server/store";
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { err } = needAdmin(req);
+  const { err } = needEditor(req);
   if (err) return err;
   const { id } = await params;
   const b = await body(req);
@@ -17,7 +17,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const { err } = needAdmin(req);
+  const { err } = needEditor(req);
   if (err) return err;
   const { id } = await params;
   await mutate((s) => {

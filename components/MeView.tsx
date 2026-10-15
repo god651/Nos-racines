@@ -1,6 +1,6 @@
 "use client";
 
-import { linkSuffix } from "@/lib/local/sync";
+import { getLink, linkSuffix } from "@/lib/local/sync";
 import { AnimatePresence, motion } from "framer-motion";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -27,6 +27,7 @@ export interface MeData {
   id: string;
   name: string;
   isAdmin: boolean;
+  role?: string | null;
   since: number;
   familyName: string;
   lang: Lang;
@@ -105,7 +106,7 @@ export function MeView({ d }: { d: MeData }) {
               </button>
             )}
             <div className="mt-1.5 flex flex-wrap items-center gap-2">
-              {d.isCreator ? <span className="rounded-full bg-or px-2.5 py-1 text-[11px] font-semibold text-nuit">{t("Fondateur")}</span> : d.isOwner ? <span className="rounded-full border border-or px-2.5 py-1 text-[11px] font-semibold text-or">{t("Administrateur principal")}</span> : <RoleBadge admin={d.isAdmin} />}
+              {d.isCreator ? <span className="rounded-full bg-or px-2.5 py-1 text-[11px] font-semibold text-nuit">{t("Fondateur")}</span> : d.isOwner ? <span className="rounded-full border border-or px-2.5 py-1 text-[11px] font-semibold text-or">{t("Administrateur principal")}</span> : <RoleBadge admin={d.isAdmin} role={d.role} />}
               <span className="text-[11px] text-or-pale/80">{d.familyName}</span>
             </div>
           </div>
@@ -135,6 +136,10 @@ export function MeView({ d }: { d: MeData }) {
                 {t("Changer")}
               </button>
             </div>
+          ) : getLink() ? (
+            <Link href="/moi/qui" className="block min-h-11 rounded-full bg-foret px-5 py-3 text-center text-[14px] font-semibold text-coton">
+              {t("Qui suis-je dans l’arbre ?")}
+            </Link>
           ) : d.options.length ? (
             <Select label={t("Je suis…")} defaultValue="" disabled={busy} onChange={(e) => e.target.value && void run(() => api(`/api/utilisateurs/${d.id}`, "PATCH", { personId: e.target.value }))}>
               <option value="" disabled>{t("Choisir ma fiche")}</option>
@@ -175,7 +180,7 @@ export function MeView({ d }: { d: MeData }) {
             { href: "/qr", title: t("QR codes"), sub: d.isAdmin ? t("Arbre, invitations, fiches") : t("Arbre et fiches") },
             { href: "/carte", title: t("Notre terre"), sub: t("La famille sur la carte") },
             { href: "/parametres", title: t("Paramètres"), sub: t("Famille, langue, son…") },
-            ...(d.isAdmin ? [{ href: "/qr", title: t("Inviter un proche"), sub: t("Lecture seule") }] : [{ href: "/arbre", title: t("L’arbre"), sub: t("Toute la famille") }]),
+            ...(d.isAdmin ? [{ href: getLink() ? "/parametres" : "/qr", title: t("Inviter un proche"), sub: getLink() ? t("Lecteur ou éditeur") : t("Lecture seule") }] : [{ href: "/arbre", title: t("L’arbre"), sub: t("Toute la famille") }]),
           ].map((x, i) => (
             <motion.div key={x.title} initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 + i * 0.06 }}>
               <Link href={x.href} className="block h-full rounded-[18px] border border-or-pale/70 bg-white/70 p-3.5 shadow-doux">
@@ -202,8 +207,8 @@ export function MeView({ d }: { d: MeData }) {
           </div>
         </Card>
 
-        {/* Autre téléphone */}
-        <Card title={t("Ouvrir mon compte sur un autre téléphone")} hint={t("Scannez ce QR code avec l’autre téléphone : il s’ouvrira sur votre compte, avec les mêmes droits. Valable 30 minutes, une seule fois.")}>
+        {/* Autre téléphone (sans famille en ligne ; en ligne, on se connecte avec son e-mail) */}
+        {!getLink() && <Card title={t("Ouvrir mon compte sur un autre téléphone")} hint={t("Scannez ce QR code avec l’autre téléphone : il s’ouvrira sur votre compte, avec les mêmes droits. Valable 30 minutes, une seule fois.")}>
           <AnimatePresence mode="wait">
             {device ? (
               <motion.div key="qr" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="flex flex-col items-center">
@@ -218,7 +223,7 @@ export function MeView({ d }: { d: MeData }) {
               </motion.div>
             )}
           </AnimatePresence>
-        </Card>
+        </Card>}
 
         <div className="grid grid-cols-2 gap-2">
           <button

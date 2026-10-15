@@ -133,33 +133,3 @@ export async function importFamily(file: File, join?: { token: string; name?: st
   await replaceAll(store);
 }
 
-/** Nouveau téléphone : la famille arrive par le partage en direct, puis le code d'invitation ouvre le compte. */
-export async function joinFromCloud(link: { fid: string; key: string }, token: string, name?: string) {
-  const { joinCloud } = await import("./sync");
-  await joinCloud(link);
-  let userId: string | undefined;
-  await mutate((s) => {
-    userId = applyInvite(s, token, name);
-    if (userId) {
-      const t = newId(32);
-      s.sessions.push({ token: t, userId, createdAt: Date.now() });
-      kv.set("nr_session", t);
-    }
-  });
-  if (!userId) throw new Error("Ce QR code n’est plus valable. Demandez-en un nouveau à l’administrateur principal de la famille.");
-}
-
-/** Nouveau téléphone ou réinstallation : avec son code de reprise, on retrouve la famille et son compte. */
-export async function recoverAccount(code: string) {
-  const { recoverWithCode } = await import("./sync");
-  const uid = await recoverWithCode(code);
-  let ok = false;
-  await mutate((s) => {
-    if (!s.users.some((u) => u.id === uid)) return;
-    const t = newId(32);
-    s.sessions.push({ token: t, userId: uid, createdAt: Date.now() });
-    kv.set("nr_session", t);
-    ok = true;
-  });
-  if (!ok) throw new Error("Ce compte n’existe plus dans la famille. Demandez un QR code « Rejoindre ».");
-}

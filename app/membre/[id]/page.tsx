@@ -67,10 +67,10 @@ export default async function MembrePage({ params }: { params: Promise<{ id: str
       .map(link),
     siblings: siblingsOf(s, p.id).map(link),
     isMe: viewer.user?.personId === p.id,
-    canSelfEdit: !viewer.isAdmin && viewer.user?.personId === p.id && !p.selfEditedAt,
+    canSelfEdit: !viewer.canEdit && viewer.user?.personId === p.id && !p.selfEditedAt,
     qrSvg: await qrSvg(qrLink),
     qrLink,
-    isAdmin: viewer.isAdmin,
+    isAdmin: viewer.canEdit,
     lang,
     online: s.settings.onlineFeatures,
   };
